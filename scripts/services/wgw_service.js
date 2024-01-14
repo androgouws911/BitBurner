@@ -49,7 +49,7 @@ export async function main(ns) {
         let player = ns.getPlayer();
         let server = ns.getServer(data.name);
         if (threads > maxThreads){
-            data.state = state.Prepped;
+            data.state = state.Hacked;
             data.time = new Date().getTime() + ONE_MINUTE;
             await writeToPort(ns, _port_list.HANDLER_PORT, data);
             continue;
@@ -158,20 +158,20 @@ function getMaxthreads(ns) {
     serverObjects.push(new ThreadServer(home, maxThreads, 0));
 }
 
-function calcHomeUsedThreads(ns) {
-    let usedRam = ns.getServerUsedRam(home);
-    let reservedRam = calculateReserve(ns);
-    let serviceRam = usedRam - reservedRam;
-
-    return Math.ceil(serviceRam / SCRIPT_RAM);
-}
-
 function getRandomNumber() {
     let min = 1;
     let max = 150;
     let randomDecimal = Math.random();
     let randomNumber = min + randomDecimal * (max - min + 1);
     return Math.floor(randomNumber);
+}
+
+function calcHomeUsedThreads(ns) {
+    let usedRam = ns.getServerUsedRam(home);
+    let reservedRam = calculateReserve(ns);
+    let serviceRam = usedRam - reservedRam;
+
+    return Math.ceil(serviceRam / SCRIPT_RAM);
 }
 
 const ignoreList = [Action.Hack, Action.Grow, Action.Weak];

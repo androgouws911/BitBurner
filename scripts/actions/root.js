@@ -16,6 +16,8 @@ export async function main(ns) {
             app.action(ns, target);
         }
     }
-
-    ns.nuke(target);
+    let portsReq = ns.getServerNumPortsRequired(target);
+    let portsOpen = ns.getServer(target).openPortCount;
+    if (portsReq <= portsOpen)
+        ns.nuke(target);
 }

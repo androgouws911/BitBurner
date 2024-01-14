@@ -1,8 +1,9 @@
-import { Data, Action, Handler } from 'scripts/data/file_list.js';
-import { readDataFromFile } from 'scripts/handler/data_file_handler.js';
-import { listIsBlank, waitWhileBusy, maxPortsOpen } from 'scripts/handler/general_handler.js';
-import { writeToPort } from 'scripts/handler/port_handler.js';
+import { listIsBlank, maxPortsOpen } from 'scripts/handler/general_handler.js';
+import { DynamicServerData } from 'scripts/models/dynamic_server_model.js';
+import { SCRIPT_RAM } from 'scripts/handler/general_handler.js';
 import { _port_list } from 'scripts/enums/ports.js';
+import { Action } from 'scripts/data/file_list.js';
+import { crawl } from 'scripts/handler/server_crawl';
 
 const home = "home";
 
@@ -18,8 +19,6 @@ export async function main(ns) {
     let unCopied = dynamicServers.filter((x) => !x.FilesCopied && x.RootStatus);
     if (!listIsBlank(unCopied))
         await fileCopy(ns, unCopied);
-
-    await writeToPort(ns, _port_list.MAIN_SERVICE_PORT, true);
 }
 
 function disableLogs(ns){
@@ -32,30 +31,33 @@ function disableLogs(ns){
 /** @param {NS} ns */
 function getDynamicData(ns){
     const playerLevel = ns.getHackingLevel();
-    let allServers = readDataFromFile(Data.Dynamic, ns);
+    let dynamicDataList = [];
+    let serverNames = crawl(ns);
 
-    allServers = allServers.filter(x =>
-        x.ServerName !== home 
-        && playerLevel >= ns.getServerRequiredHackingLevel(x.ServerName) 
-        && ns.serverExists(x.ServerName)
+    serverNames = serverNames.filter(x =>
+        x !== home && playerLevel >= ns.getServerRequiredHackingLevel(x) && ns.serverExists(x)
     );
+    
+    let purchasedServers = ns.getPurchasedServers();
+    serverNames = serverNames.filter(x => !purchasedServers.includes(x));
 
-    if (listIsBlank(allServers)) {
-        return [];
-    }
+    serverNames.forEach((x) => {
+        let maxThreads = Math.floor(ns.getServerMaxRam(x) / SCRIPT_RAM);
+        let filesCopied = ns.fileExists(Action.Weak, x);
+        let rootStatus = ns.hasRootAccess(x);
+        let dynamicData = new DynamicServerData(x, maxThreads, filesCopied, rootStatus);
 
-    return allServers;
+        dynamicDataList.push(dynamicData);
+    });
+
+    return dynamicDataList;
 }
 /** @param {NS} ns */
 async function root(ns, dataList) {
     for (let i = 0; i < dataList.length; i++) {
         let x = dataList[i];
         ns.run(Action.Root, 1, ...[x.ServerName]);
-        await waitWhileBusy(Action.Root, ns);
     }
-
-    await updateDynamicData(ns);
-    return;
 }
 /** @param {NS} ns */
 async function fileCopy(ns, dataList) {
@@ -63,15 +65,5 @@ async function fileCopy(ns, dataList) {
         let x = dataList[i];
         let serverName = x.ServerName;
         ns.run(Action.Copy, 1, ...[serverName]);
-        await waitWhileBusy(Action.Copy, ns);
     }
-
-    await updateDynamicData(ns);
-    return;
-}
-
-/** @param {NS} ns */
-async function updateDynamicData(ns) {
-    ns.run(Handler.GetDynamicData, 1);
-    await waitWhileBusy(Handler.GetDynamicData, ns)
 }

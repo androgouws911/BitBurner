@@ -20,9 +20,17 @@ export function getHWGWPostData_Mock(ns, server, player, delay=50){
     return postData;
 }
 
-export async function getWGWPostData(ns, serverName, cores){
+export function getWGWPostData(ns, serverName, cores){
     let wgwThreads = getWGWThreads(ns, serverName, cores);
     let wgwTiming = wgwTimings(ns, serverName);
+    let postData = wgwPostData(wgwTiming, wgwThreads, serverName);
+
+    return postData;
+}
+
+export function getWGWPostData_Mock(ns, server, player, cores){
+    let wgwThreads = getMockWGWThreads(ns, server, cores);
+    let wgwTiming = wgwMockTimings(ns, server, player);
     let postData = wgwPostData(wgwTiming, wgwThreads, serverName);
 
     return postData;
@@ -129,6 +137,26 @@ function wgwTimings(ns, target){
     }
 }
 
+function wgwMockTimings(ns, server, player){
+    let growT = ns.formulas.hacking.growTime(server, player);//Duration of grow
+    let weakT = ns.formulas.hacking.weakenTime(server, player);//Duration of weaken
+
+    if (growT > weakT){
+        let weakDelay = growT - weakT - singleDelay;
+        let weak2Delay = growT - weakT + singleDelay;
+
+        return [weakDelay, 0, weak2Delay];
+    }
+
+    if (weakT >= growT){
+        let growDelay = weakT - growT + singleDelay;
+        let weak2Delay = doubleDelay;
+                
+        return [0, growDelay, weak2Delay];
+    }
+}
+
+
 export function getHWGWThreads(ns, target){ 
     let weakenPerThread = ns.weakenAnalyze(1, 1);
     let server = ns.getServer(target);
@@ -179,7 +207,6 @@ export function getMockHWGWThreads(ns, server, player){
     return hwgwThreads;
 }
 
-
 function getWGWThreads(ns, target, cores){    
     let weakenPerThread = ns.weakenAnalyze(1, cores);
     let minSec = ns.getServerMinSecurityLevel(target);
@@ -195,6 +222,22 @@ function getWGWThreads(ns, target, cores){
     let gSecImpact = ns.growthAnalyzeSecurity(threadG, undefined, cores);
     curSec += gSecImpact;
     let threadW2 = calcRequiredWeakenThreads(curSec, minSec, weakenPerThread);
+
+    return [threadW1, threadG, threadW2];
+}
+
+export function getMockWGWThreads(ns, server, cores){    
+    let weakenPerThread = ns.weakenAnalyze(1, cores);
+    if (server.minDifficulty === server.hackDifficulty 
+        && server.moneyAvailable === server.moneyMax)
+        return [0,0,0];
+
+    let threadW1 = calcRequiredWeakenThreads(server.hackDifficulty, server.minDifficulty, weakenPerThread);
+    server.hackDifficulty = server.minDifficulty;
+    let threadG = calcWGWGrowthThreads(ns, server.hostname, server.moneyAvailable, server.moneyMax, cores);
+    let gSecImpact = ns.growthAnalyzeSecurity(threadG, undefined, cores);
+    server.hackDifficulty += gSecImpact;
+    let threadW2 = calcRequiredWeakenThreads(server.hackDifficulty, server.minDifficulty, weakenPerThread);
 
     return [threadW1, threadG, threadW2];
 }

@@ -1,17 +1,14 @@
-import { Data } from 'scripts/data/file_list.js';
-import { readDataFromFile } from 'scripts/handler/data_file_handler.js';
 import { writeToPort } from 'scripts/handler/port_handler.js';
 import { _port_list } from 'scripts/enums/ports.js';
+import { crawl } from 'scripts/handler/server_crawl.js';
 
 /** @param {NS} ns */
 export async function main(ns) {
-    let dataList = getRootedAndCopiedData(ns);
+    let dataList = getServers(ns);
     if (dataList == null)
         return;
 
     dataList.forEach((x) => {
-        if (!ns.serverExists(x) || !ns.hasRootAccess(x))
-            return;
         ns.killall(x);
     });
 
@@ -19,19 +16,18 @@ export async function main(ns) {
     writeToPort(ns, _port_list.MAIN_SERVICE_PORT, true);
 }
 
-function getRootedAndCopiedData(ns) {
-    let serveNames = [];
-    let data = readDataFromFile(Data.Dynamic, ns);
-    let filteredList = data.filter(function (x) {
-        return x.RootStatus === true && x.FilesCopied === true;
-    });
-    filteredList = filteredList.filter((x) => x.ServerName !== "home");
-    filteredList = filteredList.filter((x) => x.ServerName !== "darkweb");
-    filteredList = filteredList.filter((x) => x.ServerName !== "w0r1d_d43m0n");
-
-    filteredList.forEach((x) => {
-        serveNames.push(x.ServerName);
+function getServers(ns) {
+    let serverNames = crawl(ns);
+    let filteredList = serverNames.filter((x) => x !== "home");
+    filteredList = filteredList.filter((x) => {
+        let exists = ns.serverExists(x);
+        let rooted = ns.hasRootAccess(x);
+        return exists && rooted;
     })
 
-    return serveNames;
+    filteredList.forEach((x) => {
+        serverNames.push(x.ServerName);
+    })
+
+    return filteredList;
 }

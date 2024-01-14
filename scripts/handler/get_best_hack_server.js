@@ -1,11 +1,10 @@
 import { maxPortsOpen} from 'scripts/handler/general_handler.js';
-import { readDataFromFile } from 'scripts/handler/data_file_handler.js';
-import { Data } from 'scripts/data/file_list.js';
-//import { getMockHWGWThreads } from 'scripts/helpers/thread_calc_helper.js';
+import { crawl } from 'scripts/handler/server_crawl';
+import { getMockWGWThreads } from 'scripts/helpers/thread_calc_helper.js';//getMockHWGWThreads
 const minimumHackChance = 0.3;
 
 export function getHackTarget(ns, excludeTarget = []) {
-    let targetList = fetchOrderedHackableServers(ns);    
+    let targetList = getHackTargetList(ns);    
     let maxScore = -Infinity;
     let bestTarget = {};
     if (ns.args[0] !== undefined)
@@ -13,7 +12,7 @@ export function getHackTarget(ns, excludeTarget = []) {
 
     for (let target of targetList) {
         if (excludeTarget.length > 1){
-            if (excludeTarget.includes(target.ServerName))
+            if (excludeTarget.includes(target))
                 continue;
         }
 
@@ -21,13 +20,15 @@ export function getHackTarget(ns, excludeTarget = []) {
         let targetScore = result[0];
         let targetSuccess = result[1];
         let targetTime = result[2];
+        let maxMoney = result[3];
+        let homeThreads = result[4];
 
         if (targetScore > maxScore) {
-            bestTarget = { name: target.ServerName, score: targetScore, money: target.MaxMoney, successRate: targetSuccess, time: targetTime};
+            bestTarget = { name: target, score: targetScore, money: maxMoney, homeThreads: homeThreads, successRate: targetSuccess, time: targetTime};
             maxScore = targetScore;
         } else if (targetScore === maxScore) {
             if (target.MaxMoney > bestTarget.money && targetTime < bestTarget.time) {
-                bestTarget = { name: target.ServerName, score: targetScore, money: target.MaxMoney, successRate: targetSuccess, time: targetTime};
+                bestTarget = { name: target, score: targetScore, money: maxMoney, homeThreads: homeThreads, successRate: targetSuccess, time: targetTime};
                 maxScore = targetScore;
             }
         }
@@ -38,14 +39,16 @@ export function getHackTarget(ns, excludeTarget = []) {
 /** @param {NS} ns */
 export function getHackTargetList(ns) {
     let serverList = [];
-    let targetList = fetchOrderedHackableServers(ns);    
+    let targetList = getHackableServers(ns);    
     for (let target of targetList) {
         let result = getTargetScore(ns, target);
         let targetScore = result[0];
         let targetSuccess = result[1];
         let targetTime = result[2];
+        let maxMoney = result[3];
+        let homeThreads = result[4];
 
-        let targetDetails = { name: target.ServerName, score: targetScore, money: target.MaxMoney, successRate: targetSuccess, time: targetTime};
+        let targetDetails = { name: target, score: targetScore, money: maxMoney, homeThreads: homeThreads, successRate: targetSuccess, time: targetTime};
         serverList.push(targetDetails);
     }
     let resultList = serverList.filter((x) => {
@@ -60,56 +63,49 @@ export function getHackTargetList(ns) {
 
 function getTargetScore(ns, target){
     let player = ns.getPlayer();
-    let server = ns.getServer(target.ServerName);
+    let homeCores = ns.getServer("home").cpuCores;
+    let server = ns.getServer(target);
     server.hackDifficulty = server.minDifficulty;
     server.moneyAvailable = server.moneyMax;
     let targetTime = ns.formulas.hacking.weakenTime(server, player);
     let targetSuccess = ns.formulas.hacking.hackChance(server, player);
     //let threads = getMockHWGWThreads(ns, server, player);
-    //let totalThreads = threads[0] + threads[1] + threads[2] + threads[3];
-    let targetThreadTime = targetTime;// * totalThreads;
+    //let hackResultThreads = threads[0] + threads[1] + threads[2] + threads[3];
+
+    server.hackDifficulty = server.hackDifficulty * 2;
+    server.moneyAvailable = server.moneyMax * 0.1;    
+    let mockBaseThreads = getMockWGWThreads(ns, server, homeCores);
+    let homePrepThreads = mockBaseThreads[0] + mockBaseThreads[1] + mockBaseThreads[2];
+    //let targetThreadTime = targetTime;// * totalThreads;
 
     if (targetSuccess < minimumHackChance)
         return 0;
 
-    let weightedMoney = target.MaxMoney * targetSuccess;
-    let targetScore = weightedMoney / targetThreadTime;
-    return [targetScore, targetSuccess, targetTime]
+    let weightedMoney = server.moneyMax * targetSuccess;
+    let targetScore = weightedMoney / targetTime;//weightedMoney / targetThreadsTime;
+
+    return [targetScore, targetSuccess, targetTime, server.moneyMax, homePrepThreads];
 }
 
 /** @param {NS} ns */
-export function fetchOrderedHackableServers(ns) {
-    let data = readDataFromFile(Data.Static, ns);
+export function getHackableServers(ns) {
+    let data = crawl(ns);
     let filteredData = filterUnhackable(data, ns);
-    let orderedData = orderByMaxMoneyToLevelDecending(filteredData);
-    return orderedData;
-}
-/** @param {NS} ns */
-function orderByMaxMoneyToLevelDecending(data) {
-    return data.sort(maxMoneyToLevelRatio);
+    return filteredData;
 }
 
-function maxMoneyToLevelRatio(serverA, serverB) {
-  let ratioA = serverA.MaxMoney / serverA.RequiredLevel;
-  let ratioB = serverB.MaxMoney / serverB.RequiredLevel;
-
-  if (ratioA < ratioB) {
-    return 1;
-  } else if (ratioA > ratioB) {
-    return -1;
-  } else {
-    return 0;
-  }
-}
 /** @param {NS} ns */
 function filterUnhackable(data, ns) {
     let currentPorts = maxPortsOpen(ns);
     let playerHackLevel = ns.getHackingLevel();
 
     let filteredList = data.filter(server =>
-        server.RequiredHackLevel <= playerHackLevel && server.RequiredPorts <= currentPorts
-        && serverHasMoney(server.MaxMoney) && ns.serverExists(server.ServerName)
+        ns.getServerRequiredHackingLevel(server) <= playerHackLevel && ns.getServerNumPortsRequired(server) <= currentPorts
+        && serverHasMoney(ns.getServerMaxMoney(server)) && ns.serverExists(server)
     );
+    
+    let pServers = ns.getPurchasedServers();
+    filteredList.filter((x) => !pServers.includes(x));
 
     if (filteredList.length === 0)
         return null;

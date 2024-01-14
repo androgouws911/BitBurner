@@ -1,7 +1,7 @@
 // services.js
 export const Services = {
     Startup: "scripts/services/startup.js",
-    EarlyHack:"old_scripts/startup_script.js",
+    EarlyHack:"scripts/services/early_game_hack.js",
     Manager: "scripts/services/main_manager.js",
     HackHandler: "scripts/services/hack_port_handler.js",
     HWGW: "scripts/services/hwgw_service.js",

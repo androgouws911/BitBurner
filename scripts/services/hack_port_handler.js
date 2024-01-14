@@ -1,7 +1,8 @@
 import { getHackTargetList } from 'scripts/handler/get_best_hack_server.js';
+import { SCRIPT_RAM } from 'scripts/handler/general_handler.js';
 import { writeToPort } from 'scripts/handler/port_handler.js';
+import { Action, Services } from 'scripts/data/file_list.js';
 import { _port_list } from 'scripts/enums/ports.js';
-import { Action, Services, Handler } from 'scripts/data/file_list.js';
 
 const state = {
     Ready : 1,
@@ -11,9 +12,7 @@ const state = {
 
 const rstate = {
     Ready : 1,
-    Static : 2,
-    Dynamic : 3,
-    Prep : 5,
+    Waiting : 2,
     Update : 6
 }
 
@@ -74,7 +73,7 @@ export async function main(ns) {
 
     //Active Loop
     while (true){
-        REFRESH_PERIOD = setRefreshRate();
+        REFRESH_PERIOD = setRefreshRate(ns);
         await refreshTargets(ns);//Check for new targets
         await ns.sleep(ONE_SECOND);
         let peekedData = this_handler.peek();
@@ -221,30 +220,6 @@ async function refreshTargets(ns){
     }
     
     if (refreshState === rstate.Ready){//Fetch All data
-        ns.run(Handler.GetAllData, 1);
-        ns.printf("Refreshing All Data");
-        await ns.sleep(ONE_SECOND);
-        refreshState = rstate.Static;
-        return;
-    }
-
-    if (refreshState === rstate.Static){//Fetch Static data
-        ns.run(Handler.GetStaticData, 1);
-        ns.printf("Refreshing Static Data");
-        await ns.sleep(ONE_SECOND);
-        refreshState = rstate.Dynamic;
-        return;
-    }
-
-    if (refreshState === rstate.Dynamic){//Fetch Dynamic data
-        ns.run(Handler.GetDynamicData, 1);
-        ns.printf("Refreshing Dynamic Data");
-        await ns.sleep(ONE_SECOND);
-        refreshState = rstate.Prep;
-        return;
-    }
-
-    if (refreshState === rstate.Prep) {//Prep hackable servers
         ns.run(Services.PrepHackServers, 1);
         ns.printf("Prepping new hackable servers...");
         await ns.sleep(ONE_SECOND);
@@ -256,9 +231,18 @@ async function refreshTargets(ns){
         await ns.sleep(ONE_SECOND);
         return;
     }
-
+    
     ns.printf(`Getting new targets....`);//Fetch target list
-    targetList = getHackTargetList(ns);
+    targetList = await getHackTargetList(ns);
+    let homeMaxThreads = getHomeMaxThreads(ns);
+
+    targetList = targetList.filter((x) => {
+        return x.homeThreads <= homeMaxThreads
+    });
+
+    if (targetList.length < 1)
+        throw new Error("Home Max Threads issue, fix when mid/late game script starts");
+
     if (targetList.length > MAX_TARGETS);
         targetList = targetList.slice(0, MAX_TARGETS);
     
@@ -330,6 +314,16 @@ function getActiveServerScripts(ns){
     return results;
 }
 
+function getHomeMaxThreads(ns){
+    let homeMaxRam = ns.getServerMaxRam(home);
+    let reserved = calculateReserve(ns);
+    let reservedExtra = calculateReserveExtra(homeMaxRam, reserved);
+    let effectiveMax = homeMaxRam - reserved - reservedExtra;
+    let maxThreads = Math.floor(effectiveMax / SCRIPT_RAM);
+
+    return maxThreads;
+}
+
 function removeItem(itemToRemove){
     let index = handlerList.findIndex(item => item === itemToRemove);
     if (index !== -1)
@@ -369,18 +363,20 @@ function targetInIdealState(ns, targetName){
 
 function setRefreshRate(ns){
     let hackLevel = ns.getHackingLevel();
-    REFRESH_PERIOD = getRefreshPeriod(hackLevel); 
+    return getRefreshPeriod(hackLevel);
 }
 
 function disableLogs(ns){
     ns.disableLog("disableLog");
-    ns.disableLog("getServerMaxRam");
-    ns.disableLog("getServerUsedRam");
-    ns.disableLog("getServerMoneyAvailable");
-    ns.disableLog("getServerMaxMoney");
+    ns.disableLog("getServerRequiredHackingLevel");
     ns.disableLog("getServerMinSecurityLevel");
+    ns.disableLog("getServerNumPortsRequired");
+    ns.disableLog("getServerMoneyAvailable");
     ns.disableLog("getServerSecurityLevel");
+    ns.disableLog("getServerMaxMoney");
     ns.disableLog("ui.clearTerminal");
+    ns.disableLog("getServerUsedRam");
+    ns.disableLog("getServerMaxRam");
     ns.disableLog("getHackingLevel");
     ns.disableLog("resizeTail");
     ns.disableLog("getPlayer");
@@ -388,6 +384,7 @@ function disableLogs(ns){
     ns.disableLog("moveTail");
     ns.disableLog("atExit");
     ns.disableLog("sleep");
+    ns.disableLog("scan");
     ns.disableLog("exec");
     ns.disableLog("tail");
     ns.disableLog("run");
@@ -407,4 +404,43 @@ const refresh_threshold = [
     { level: 100, value: HALF_MINUTE },
     { level: 1999, value: ONE_MINUTE },
     { level: Infinity, value: TEN_MINUTES },
+];
+
+const ignoreList = [Action.Hack, Action.Grow, Action.Weak];
+function calculateReserve(ns){
+    let list  = ns.ps(home);
+    let result = 0;
+    for (let item of list){
+        if (ignoreList.includes(item.filename))
+            continue;
+
+        result += ns.getScriptRam(item.filename);
+    }
+
+    return result;
+}
+
+function calculateReserveExtra(maxRam, reservedSpace) {
+    let adaptedRam = maxRam - reservedSpace;
+  
+    for (const threshold of homeFreeSpaceThresholds) {
+      if (adaptedRam <= threshold.maxRamThreshold) {
+        return threshold.value;
+      }
+    }
+  
+    return 0; 
+  }
+
+const homeFreeSpaceThresholds = [
+    { maxRamThreshold: 0, value: 0 },
+    { maxRamThreshold: 10, value: 2 },
+    { maxRamThreshold: 50, value: 10 },
+    { maxRamThreshold: 100, value: 50 },
+    { maxRamThreshold: 500, value: 100 },
+    { maxRamThreshold: 1000, value: 200 },
+    { maxRamThreshold: 2000, value: 300 },
+    { maxRamThreshold: 4000, value: 400 },
+    { maxRamThreshold: 8000, value: 500 },
+    { maxRamThreshold: Infinity, value: 1024 },
 ];

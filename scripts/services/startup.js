@@ -1,17 +1,30 @@
 import { Services } from 'scripts/data/file_list.js';
 const home = "home";
+const TEN_SECONDS = 10000;
 
 /** @param {NS} ns */
 export async function main(ns) {
-    for (const task of dataManagementTasks) {
-        await executeDataTask(ns, task);
-    }
+    disableLogs(ns);
+    let printCounter = 0;
     while (isEarlyGame(ns)){
-        runScript(ns, Services.EarlyHack);
-        runScript(ns, Services.HackNet);
-        runScript(ns, Services.PurchaseServer);
-    }
+        if (printCounter < 1){
+            printCounter = 1;
+            ns.printf("Early game");
+        }
 
+        runScript(ns, Services.EarlyHack);
+
+        let homeGB = ns.getServerMaxRam(home);
+        if (homeGB > 16)
+            runScript(ns, Services.HackNet);
+        if (homeGB > 64){
+            if (!ns.isRunning(Services.UpgradeServer))
+                runScript(ns, Services.PurchaseServer);
+        }
+            
+        await ns.sleep(TEN_SECONDS);
+    }
+    ns.printf("Mid/Late game entered");
     runScript(ns, Services.Manager);
 }
 
@@ -23,14 +36,14 @@ function runScript(ns, scriptFile) {
 
 function isEarlyGame (ns){
     let homeGB = ns.getServerMaxRam(home);
-    if (homeGB < 64)
+    if (homeGB < 8000)
         return true;
 
     let hasFormulas = ns.fileExists('Formulas.exe');
     if (!hasFormulas)
         return true;
 
-    let pServers = ns.getPurchasedSerers();
+    let pServers = ns.getPurchasedServers();
     if (pServers.length < 25)
         return true;
 
@@ -52,4 +65,14 @@ function getMinPurchasedRam(servers) {
         }
         return lowest;
     });
+}
+
+function disableLogs(ns){
+    ns.disableLog("disableLog");
+    ns.disableLog("scan");
+    ns.disableLog("getServerMaxRam");
+    ns.disableLog("getServerMaxMoney");
+    ns.disableLog("sleep");
+    ns.disableLog("exec");
+    ns.disableLog("run");
 }
