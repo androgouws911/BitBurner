@@ -21,8 +21,8 @@ const ONE_MINUTE = 60000;
 /** @param {NS} ns */
 export async function main(ns) {
     ns.tail();
-    ns.resizeTail(600,500);
-    ns.moveTail(1750,900);
+    ns.resizeTail(600,400);
+    ns.moveTail(1750,185);
     ns.atExit(() => {
         ns.closeTail();
         let hwgw = ns.getRunningScript(Services.HWGW, home);
@@ -46,8 +46,18 @@ export async function main(ns) {
         let player = ns.getPlayer();
         let server = ns.getServer(data.name);
         if (threads > 0){
+            let currentDate = new Date();
+            let timeFormatted = currentDate.toLocaleTimeString(`sv`);
+            ns.printf(timeFormatted);
             let batchList = getBatchList(post);
-            await executeThreadsToServers(ns, batchList, data.name);
+            let toBePosted = true;
+            while (toBePosted){
+                let result = await executeThreadsToServers(ns, batchList, data.name);
+                if (result)
+                    toBePosted = false;
+                else
+                    await ns.sleep(10);
+            }
             let weakT = ns.formulas.hacking.weakenTime(server, player);
             currentTime = new Date().getTime();
             endTime = currentTime + weakT + TEN_SECONDS;
@@ -56,10 +66,7 @@ export async function main(ns) {
             ns.printf(`No prep required: ${data.name}`);
             endTime = currentTime;
         }
-        let currentDate = new Date();
-        let timeFormatted = currentDate.toLocaleTimeString(`sv`);
         data.state = state.Prepped;
-        ns.printf(timeFormatted);
         data.time = endTime;
         ns.printf(`Writing to Handler: ${data.name} - ${ns.tFormat(data.time - new Date().getTime())}`);
         ns.printf(`${"-".repeat(50)}`);
@@ -68,19 +75,19 @@ export async function main(ns) {
 }
 /** @param {NS} ns */
 async function executeThreadsToServers(ns, batchList, target) {
-    let batchThreads = 0;
+    let totalNeeded = 0;
     let threadsUsed = 0;
     let execBuilder = [];
     for (let batch of batchList){
         let threadsNeeded = batch[1];
-        batchThreads+=threadsNeeded;
+        totalNeeded+=threadsNeeded;
         let currentLeft = threadsNeeded;
         let action = batch[0];
         let delay = batch[2];
         let counter = 0;
         serverObjects.sort((a, b) => b.AvailableThreads - a.AvailableThreads);
         while (counter < threadsNeeded) {
-            if (getAvailableThreads() === 0)
+            if (currentLeft === 0 || getAvailableThreads() <= 0)
                 break;
             
             serverObjects.some((x) => {
@@ -95,13 +102,13 @@ async function executeThreadsToServers(ns, batchList, target) {
             counter += useThreads;
             x.AvailableThreads -= useThreads;
             threadsUsed+=useThreads;
-            if (currentLeft === 0 || getAvailableThreads() === 0)
+            if (currentLeft === 0 || getAvailableThreads() <= 0)
                 return true;
             });
         }
     }    
 
-    if (threadsUsed < batchThreads)
+    if (threadsUsed !== totalNeeded)
         return false;
     
     execBuilder.forEach((x) => {
@@ -113,6 +120,7 @@ async function executeThreadsToServers(ns, batchList, target) {
         ns.printf(`A:${actionString} - T:${paddedThreads} - D:${x[3][1]}`);
         ns.exec(x[0], x[1], x[2], ...x[3]);
     });
+
     return true;
 }
 
@@ -145,22 +153,14 @@ function updateThreads(ns) {
         x.AvailableThreads = x.MaxThreads - x.UsedThreads;
     });
 }
+
 function getMaxthreads(ns) {
     serverObjects = [];
-    let homeMaxRam = ns.getServerMaxRam(home);
-    let reserved = calculateReserve(ns);
-    let reservedExtra = calculateReserveExtra(homeMaxRam, reserved);
-    let effectiveMax = homeMaxRam - reserved - reservedExtra;
-    let maxThreads = Math.floor(effectiveMax / SCRIPT_RAM);
-
-    serverObjects.push(new ThreadServer(home, maxThreads, 0));
-
-    let purchasedServers = ns.getPurchasedServers();
-    purchasedServers.forEach((x) => {
-        let maxRam = ns.getServerMaxRam(x);
-        let threads = Math.floor(maxRam / SCRIPT_RAM);
-        serverObjects.push(new ThreadServer(x, threads, 0));
-    });
+    let purchasedServers = ns.getPurchasedServers(ns);   
+    let serversAllowed = purchasedServers[purchasedServers.length-1]; //allocate last p.server
+    let maxRam = ns.getServerMaxRam(serversAllowed);
+    let maxThreads = Math.floor(maxRam / SCRIPT_RAM);
+    serverObjects.push(new ThreadServer(serversAllowed, maxThreads, 0));
 }
 
 function getRandomNumber() {

@@ -37,7 +37,7 @@ function runScript(ns, scriptFile) {
 
 function isEarlyGame (ns){
     let homeGB = ns.getServerMaxRam(home);
-    if (homeGB < 8000)
+    if (homeGB < 200)
         return true;
 
     let hasFormulas = ns.fileExists('Formulas.exe');
@@ -49,7 +49,7 @@ function isEarlyGame (ns){
         return true;
 
     let lowestGB = getMinPurchasedRam(pServers).MaxRAM;
-    if (lowestGB < 64)
+    if (lowestGB < 1000)
         return true;
 
     return false;

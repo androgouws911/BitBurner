@@ -38,7 +38,7 @@ export async function main(ns) {
             if (nextCost === Infinity)
             continue;
         
-            ns.printf(`Next cost: ${ns.formatNumber(nextCost)} (${ns.formatRam(nextRam)}) (PS: ${server.ServerName} | ${server.MaxRAM}) (P: $${ns.formatNumber(ns.getServerMoneyAvailable("home"))} |E: ${ns.formatNumber(ns.getServerMoneyAvailable("home")/moneyMultiplier)})`);
+            ns.printf(`Next cost: ${ns.formatNumber(nextCost)} (${ns.formatRam(nextRam)}) (PS: ${server.ServerName} | ${server.MaxRAM}) (P: $${ns.formatNumber(ns.getServerMoneyAvailable("home"))} | N: ${ns.formatNumber(nextCost * moneyMultiplier)})`);
             await playerHasTheMoney(ns, nextCost);
             let purchased = ns.upgradePurchasedServer(name, nextRam);
             if (purchased){

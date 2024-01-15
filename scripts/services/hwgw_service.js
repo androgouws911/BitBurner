@@ -16,31 +16,46 @@ const TENTH_SECOND = 100;
 const QUARTER_SECOND = 250;
 const HALF_SECOND = 500;
 const ONE_SECOND = 1000;
+const FIVE_SECONDS = 5000;
 const TEN_SECONDS = 10000;
 const ONE_MINUTE = 60000;
 const home = "home";
 
 let SPACING = TEN_SECONDS;
-let DELAY = SPACING / 5;
+let DELAY = 20;
+let posX = 1750;
+let posY = 0;
+let instanceCount = 1;
+let instanceID = 0;
 
 /** @param {NS} ns */
 export async function main(ns) {
+    instanceID = ns.args[0];
+    if (ns.args[0] === undefined){
+        ns.atExit(() => {
+            ns.closeTail();
+            let hph = ns.getRunningScript(Services.HackHandler, home);
+            if (hph)
+            ns.kill(hph.pid);
+        });
+        instanceID = 1;
+    }
+    else {
+        ns.atExit(() => {
+            ns.closeTail();
+        });
+    }
+
+    let finalX = getTailPositions(instanceID);
     ns.tail();
     ns.resizeTail(600,180);
-    ns.moveTail(1750,0);
-    ns.atExit(() => {
-        ns.closeTail();
-        let hwgw2 = ns.getRunningScript(Services.HWGW2, home);
-        if (hwgw2)
-            ns.kill(hwgw2.pid);
-    });
+    ns.moveTail(finalX,posY);
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
     while (true){
         getMaxthreads(ns);
-        let maxThreads = getAvailableThreads();
+        let maxThreads = getMaxThreads();
         SPACING = getSpacing(maxThreads);
-        DELAY = SPACING / 5;
     
         let data = await readFromPort(ns, _port_list.HWGW_THREADS);
         if (data == null){
@@ -48,10 +63,11 @@ export async function main(ns) {
             continue;
         }
 
+
+        await postToHistoryPort(ns, data.name);
         updateThreads(ns);
         let currentTime = new Date().getTime();
-        let endTime = new Date().getTime();
-        
+        let endTime = new Date().getTime();        
         if (targetInIdealState(ns, data.name)){
             let player = ns.getPlayer();
             let server = ns.getServer(data.name);
@@ -82,6 +98,8 @@ export async function main(ns) {
                 updateThreads(ns);
                 let availableThreads = getAvailableThreads();
                 while (availableThreads < threads){
+                    currentTime = new Date().getTime();
+                    ns.printf(`${new Date(currentTime).toLocaleTimeString('sv')} - Not enough threads to post(E:${ns.tFormat(endLoopTime-currentTime)})`)
                     updateThreads(ns);
                     availableThreads = getAvailableThreads();
                     await ns.sleep(SPACING);
@@ -95,9 +113,13 @@ export async function main(ns) {
                 
                 let batchList = getBatchList(post);
                 ns.printf(`Hacking ${data.name}: ${ns.tFormat(endLoopTime - currentTime)}`);
-                await executeThreadsToServers(ns, batchList, data.name);
+                let result = await executeThreadsToServers(ns, batchList, data.name);
                 currentTime = new Date().getTime();
-                endTime = currentTime + weakT + TEN_SECONDS;
+                if (result)
+                    endTime = currentTime + weakT + TEN_SECONDS;
+                else
+                    ns.printf(`${new Date().toLocaleTimeString('sv')} - Not enough threads to post`)
+
                 await ns.sleep(SPACING);
                 ns.printf(`${"-".repeat(25)}`);
             }
@@ -113,6 +135,13 @@ export async function main(ns) {
         ns.printf(`${"-".repeat(50)}`);
         await writeToPort(ns, _port_list.HANDLER_PORT, data);
     }
+}
+
+function getTailPositions(id){
+    if (id > 5)
+        return 5 * posX;
+    
+    return id * posX;
 }
 
 function targetInIdealState(ns, targetName){
@@ -132,14 +161,20 @@ function targetInIdealState(ns, targetName){
 /** @param {NS} ns */
 async function executeThreadsToServers(ns, batchList, target) {
     let execBuilder = [];
+    let totalNeeded = 0;
+    let totalUsed = 0;
     for (let batch of batchList){
-        let threadsNeeded = batch[1]
+        let threadsNeeded = batch[1];
+        totalNeeded += threadsNeeded;
         let currentLeft = threadsNeeded;
         let action = batch[0];
         let delay = batch[2];
         let counter = 0;
         serverObjects.sort((a, b) => b.AvailableThreads - a.AvailableThreads);
         while (counter < threadsNeeded) {
+            if (currentLeft === 0 || getAvailableThreads() <= 0)
+                break;
+
             serverObjects.some((x) => {
                 if (x.AvailableThreads < 1)
                     return false;
@@ -150,13 +185,17 @@ async function executeThreadsToServers(ns, batchList, target) {
             let execArgs = [target, delay, randomNumber];
             execBuilder.push([action, x.ServerName, useThreads, execArgs]);
             counter += useThreads;
+            totalUsed +=useThreads;
             x.AvailableThreads -= useThreads;
             
-            if (currentLeft == 0)
+            if (currentLeft === 0 || getAvailableThreads() <= 0)
                 return true;
             });
         }
     }
+
+    if (totalNeeded !== totalUsed)
+        return false;
 
     for (let x of execBuilder){
         let actionString = `${x[0].slice(x[0].length-7, x[0].length-3)}`;
@@ -169,6 +208,18 @@ async function executeThreadsToServers(ns, batchList, target) {
         await ns.exec(x[0], x[1], x[2], ...x[3]);
         ns.printf(`A:${actionString} - T:${paddedThreads} - D:${x[3][1]}`);
     }
+
+    return true;
+}
+
+function getAvailableThreads(){
+    return serverObjects.reduce((total, server) => {
+        return total + server.AvailableThreads; }, 0);
+}
+
+function getMaxThreads(){
+    return serverObjects.reduce((total, server) => {
+        return total + server.MaxThreads; }, 0);
 }
 
 function getBatchList(data){
@@ -191,11 +242,6 @@ function getBatchItem(delay, threads, action){
     return [action, threads, delay]
 }
 
-function getAvailableThreads(){
-    return serverObjects.reduce((total, server) => {
-        return total + server.AvailableThreads; }, 0);
-}
-
 function updateThreads(ns) {
     serverObjects.forEach((x) => {
         x.UsedThreads = calcServerUsedThreads(ns, x.ServerName);
@@ -204,15 +250,50 @@ function updateThreads(ns) {
 }
 
 function getMaxthreads(ns) {
-    serverObjects = [];
-    let purchasedServers = ns.getPurchasedServers(ns);    
-    if (purchasedServers.length == 25)
-        purchasedServers = purchasedServers.slice(0,10);
-    purchasedServers.forEach((x) => {
+    getInstanceCount(ns);
+    serverObjects = []; 
+    let purchasedServers = ns.getPurchasedServers();
+    let serversAllowed = [];
+    if (instanceCount === 1)
+        serversAllowed = purchasedServers.slice(0,purchasedServers.length-1);
+    else{
+        let allocateableServers = purchasedServers.slice(0, purchasedServers.length - 1);
+        let totalServers = allocateableServers.length;
+        let serversPerInstance = Math.floor(totalServers / instanceCount);
+        let extraServers = totalServers % instanceCount;
+        let startIdx = (instanceID - 1) * serversPerInstance;
+        let endIdx = startIdx + serversPerInstance;
+        if (extraServers > 0)
+        {
+            if (instanceID <= extraServers) {
+                startIdx += instanceID - 1;
+                endIdx += instanceID;
+            }
+            else{
+                startIdx += extraServers;
+                endIdx += extraServers;
+            }
+        }
+        serversAllowed = allocateableServers.slice(startIdx, endIdx);
+    }    
+
+    serversAllowed.forEach((x) => {
         let maxRam = ns.getServerMaxRam(x);
         let maxThreads = Math.floor(maxRam / SCRIPT_RAM);
         serverObjects.push(new ThreadServer(x, maxThreads, 0));
     });
+}
+
+function getInstanceCount(ns){
+    let homePs = ns.ps(home);
+    let count = homePs.reduce((acc, obj) => {
+        if (obj.filename === Services.HWGW) {
+          return acc + 1;
+        }
+        return acc;
+      }, 0);
+
+    return count;
 }
 
 function calcServerUsedThreads(ns, name) {
@@ -230,6 +311,13 @@ function getRandomNumber() {
     return Math.floor(randomNumber);
 }
 
+async function postToHistoryPort(ns, targetName){
+    let historyPacket = { id: instanceID, target: targetName };
+    await writeToPort(ns, _port_list.HISTORY_PORT, historyPacket);
+    ns.printf(`Waiting for target safety`);
+    await ns.sleep(FIVE_SECONDS);
+}
+
 function getSpacing(maxThreads) {
     for (const threshold of threads_threshold) {
         if (maxThreads < threshold.threads) {
@@ -242,8 +330,8 @@ function getSpacing(maxThreads) {
 
 const threads_threshold = [
     { threads: 100, value: TEN_SECONDS },
-    { threads: 10000, value: ONE_SECOND },
-    { threads: 100000, value: HALF_SECOND },
+    { threads: 100000, value: ONE_SECOND },
+    { threads: 1000000, value: HALF_SECOND },
     { threads: 10000000, value: QUARTER_SECOND },
     { threads: Infinity, value: TENTH_SECOND },
 ];

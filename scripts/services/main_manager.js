@@ -9,10 +9,6 @@ const serviceTasks = [//TODO: PurchaseService (DarkWeb / Augments / RAM / Cores 
     { name: "HackHandler", waitBusy: true },
     { name: "WGW", waitBusy: false },
     { name: "HWGW", waitBusy: false },
-    { name: "HWGW2", waitBusy: false },
-    { name: "HWGW3", waitBusy: false },
-    { name: "HWGW4", waitBusy: false },
-    { name: "HWGW5", waitBusy: false },
     { name: "HackNet", waitBusy: false },
     { name: "PurchaseServer", waitBusy: false },
     { name: "Contract", waitBusy: false }
