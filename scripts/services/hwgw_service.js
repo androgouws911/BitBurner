@@ -93,12 +93,12 @@ export async function main(ns) {
                         break;
                 
                 let batchList = getBatchList(post);
+                ns.printf(`Hacking ${data.name}: ${ns.tFormat(endLoopTime - currentTime)}`);
                 await executeThreadsToServers(ns, batchList, data.name);
                 currentTime = new Date().getTime();
                 endTime = currentTime + weakT + TEN_SECONDS;
                 await ns.sleep(SPACING);
                 ns.printf(`${"-".repeat(25)}`);
-                ns.printf(`Hacking: ${ns.tFormat(endLoopTime - currentTime)}`);
             }
         }
         else{    
@@ -164,8 +164,8 @@ async function executeThreadsToServers(ns, batchList, target) {
             continue;
         }
         
-        ns.exec(x[0], x[1], x[2], ...x[3]);
-        ns.printf(`${target} - A:${actionString} - T:${paddedThreads} - D:${x[3][1]}`);
+        await ns.exec(x[0], x[1], x[2], ...x[3]);
+        ns.printf(`${x[2]} - A:${actionString} - T:${paddedThreads} - D:${x[3][1]}`);
     }
 }
 
@@ -204,6 +204,8 @@ function updateThreads(ns) {
 function getMaxthreads(ns) {
     serverObjects = [];
     let purchasedServers = ns.getPurchasedServers(ns);    
+    if (purchasedServers.length == 25)
+        purchasedServers = purchasedServers.slice(0,15);
     purchasedServers.forEach((x) => {
         let maxRam = ns.getServerMaxRam(x);
         let maxThreads = Math.floor(maxRam / SCRIPT_RAM);
@@ -240,7 +242,7 @@ const threads_threshold = [
     { threads: 100, value: TEN_SECONDS },
     { threads: 10000, value: ONE_SECOND },
     { threads: 100000, value: HALF_SECOND },
-    { threads: 1000000, value: QUARTER_SECOND },
+    { threads: 10000000, value: QUARTER_SECOND },
     { threads: Infinity, value: TENTH_SECOND },
 ];
 

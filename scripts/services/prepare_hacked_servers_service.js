@@ -37,9 +37,6 @@ function getDynamicData(ns){
     serverNames = serverNames.filter(x =>
         x !== home && playerLevel >= ns.getServerRequiredHackingLevel(x) && ns.serverExists(x)
     );
-    
-    let purchasedServers = ns.getPurchasedServers();
-    serverNames = serverNames.filter(x => !purchasedServers.includes(x));
 
     serverNames.forEach((x) => {
         let maxThreads = Math.floor(ns.getServerMaxRam(x) / SCRIPT_RAM);

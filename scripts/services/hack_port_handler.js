@@ -1,5 +1,4 @@
 import { getHackTargetList } from 'scripts/handler/get_best_hack_server.js';
-import { SCRIPT_RAM } from 'scripts/handler/general_handler.js';
 import { writeToPort } from 'scripts/handler/port_handler.js';
 import { Action, Services } from 'scripts/data/file_list.js';
 import { _port_list } from 'scripts/enums/ports.js';
@@ -16,8 +15,9 @@ const rstate = {
     Update : 6
 }
 
-const MAX_TARGETS = 10;
+const MAX_TARGETS = 30;
 const TENTH_SECOND = 100;
+const HALF_SECOND = 500;
 const ONE_SECOND = 1000;
 const HALF_MINUTE = 30000;
 const ONE_MINUTE = 60000;
@@ -51,7 +51,7 @@ export async function main(ns) {
     ns.resizeTail(450,585);
     ns.moveTail(1295, 0);
     ns.atExit(() => {
-        //ns.closeTail();
+        ns.closeTail();
         let wgw = ns.getRunningScript(Services.WGW, home);
         if (wgw)
             ns.kill(wgw.pid);
@@ -75,7 +75,7 @@ export async function main(ns) {
     while (true){
         REFRESH_PERIOD = setRefreshRate(ns);
         await refreshTargets(ns);//Check for new targets
-        await ns.sleep(ONE_SECOND);
+        await ns.sleep(HALF_SECOND);
         let peekedData = this_handler.peek();
         if (peekedData !== NULL_MESSAGE){//check for active posts
             ns.printf("Handler Queue received data");
@@ -123,7 +123,7 @@ export async function main(ns) {
             handleItem.time = new Date().getTime();
             while (hwgwPortHandler.full()){
                 ns.printf("HWGW handler full - awaiting post");
-                await ns.sleep(ONE_SECOND);
+                await ns.sleep(HALF_SECOND);
             }
             ns.printf(`Writing to HWGW: ${handleItem.name}`);
             hwgwPortHandler.write(JSON.stringify(handleItem));
@@ -142,7 +142,7 @@ export async function main(ns) {
             handleItem.time = new Date().getTime();
             while (wgwPortHandler.full()){
                 ns.printf("WGW handler full - awaiting post");
-                await ns.sleep(ONE_SECOND);
+                await ns.sleep(HALF_SECOND);
             }
             
             ns.printf(`Writing to WGW: ${handleItem.name}`);
@@ -222,28 +222,19 @@ async function refreshTargets(ns){
     if (refreshState === rstate.Ready){//Fetch All data
         ns.run(Services.PrepHackServers, 1);
         ns.printf("Prepping new hackable servers...");
-        await ns.sleep(ONE_SECOND);
+        await ns.sleep(HALF_SECOND);
         refreshState = rstate.Update;
         return;
     }
 
     if (ns.isRunning(Services.PrepHackServers)){
-        await ns.sleep(ONE_SECOND);
+        await ns.sleep(HALF_SECOND);
         return;
     }
-    
+
     ns.printf(`Getting new targets....`);//Fetch target list
     targetList = await getHackTargetList(ns);
-    let homeMaxThreads = getHomeMaxThreads(ns);
-
-    targetList = targetList.filter((x) => {
-        return x.homeThreads <= homeMaxThreads
-    });
-
-    if (targetList.length < 1)
-        throw new Error("Home Max Threads issue, fix when mid/late game script starts");
-
-    if (targetList.length > MAX_TARGETS);
+     if (targetList.length > MAX_TARGETS);
         targetList = targetList.slice(0, MAX_TARGETS);
     
     ns.printf(`Comparing ${targetList.length} targets`);
@@ -257,7 +248,7 @@ async function refreshTargets(ns){
             continue;
         }
          
-        await ns.sleep(ONE_SECOND);
+        await ns.sleep(HALF_SECOND);
         handleTargetListData(ns, target);//Add to active list
     }
 
@@ -312,16 +303,6 @@ function getActiveServerScripts(ns){
     });
 
     return results;
-}
-
-function getHomeMaxThreads(ns){
-    let homeMaxRam = ns.getServerMaxRam(home);
-    let reserved = calculateReserve(ns);
-    let reservedExtra = calculateReserveExtra(homeMaxRam, reserved);
-    let effectiveMax = homeMaxRam - reserved - reservedExtra;
-    let maxThreads = Math.floor(effectiveMax / SCRIPT_RAM);
-
-    return maxThreads;
 }
 
 function removeItem(itemToRemove){
@@ -404,43 +385,4 @@ const refresh_threshold = [
     { level: 100, value: HALF_MINUTE },
     { level: 1999, value: ONE_MINUTE },
     { level: Infinity, value: TEN_MINUTES },
-];
-
-const ignoreList = [Action.Hack, Action.Grow, Action.Weak];
-function calculateReserve(ns){
-    let list  = ns.ps(home);
-    let result = 0;
-    for (let item of list){
-        if (ignoreList.includes(item.filename))
-            continue;
-
-        result += ns.getScriptRam(item.filename);
-    }
-
-    return result;
-}
-
-function calculateReserveExtra(maxRam, reservedSpace) {
-    let adaptedRam = maxRam - reservedSpace;
-  
-    for (const threshold of homeFreeSpaceThresholds) {
-      if (adaptedRam <= threshold.maxRamThreshold) {
-        return threshold.value;
-      }
-    }
-  
-    return 0; 
-  }
-
-const homeFreeSpaceThresholds = [
-    { maxRamThreshold: 0, value: 0 },
-    { maxRamThreshold: 10, value: 2 },
-    { maxRamThreshold: 50, value: 10 },
-    { maxRamThreshold: 100, value: 50 },
-    { maxRamThreshold: 500, value: 100 },
-    { maxRamThreshold: 1000, value: 200 },
-    { maxRamThreshold: 2000, value: 300 },
-    { maxRamThreshold: 4000, value: 400 },
-    { maxRamThreshold: 8000, value: 500 },
-    { maxRamThreshold: Infinity, value: 1024 },
 ];

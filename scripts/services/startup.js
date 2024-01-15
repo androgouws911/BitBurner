@@ -16,8 +16,9 @@ export async function main(ns) {
 
         let homeGB = ns.getServerMaxRam(home);
         if (homeGB > 16)
-            runScript(ns, Services.HackNet);
-        if (homeGB > 64){
+            if (ns.getPurchasedServers().length < 25)
+                runScript(ns, Services.HackNet);
+        if (homeGB > 256){
             if (!ns.isRunning(Services.UpgradeServer))
                 runScript(ns, Services.PurchaseServer);
         }

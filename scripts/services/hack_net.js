@@ -1,6 +1,6 @@
 import {_timeout} from 'scripts/enums/timeout.js';
 
-const MAX_TOTAL_NODES = 35;
+const MAX_TOTAL_NODES = 25;
 const DEFAULT_LEVELS = 10;
 const MAX_RAM = 64;
 const MAX_CORE = 16;
@@ -45,7 +45,7 @@ async function keepAliveCheck(ns) {
     if (nodeCount < 1)
         return;
     let lastNode = ns.hacknet.getNodeStats(nodeCount - 1);
-    if (lastNode.level == MAX_LEVEL && lastNode.ram == MAX_RAM && lastNode.cores == MAX_CORE && nodeCount == MAX_TOTAL_NODES)
+    if (lastNode.level == MAX_LEVEL && lastNode.ram == MAX_RAM && lastNode.cores == MAX_CORE && nodeCount >= MAX_TOTAL_NODES)
         _keepAlive = false;
     return;
 }

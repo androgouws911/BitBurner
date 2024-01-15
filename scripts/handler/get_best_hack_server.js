@@ -1,6 +1,6 @@
 import { maxPortsOpen} from 'scripts/handler/general_handler.js';
 import { crawl } from 'scripts/handler/server_crawl';
-import { getMockWGWThreads } from 'scripts/helpers/thread_calc_helper.js';//getMockHWGWThreads
+import { getMockHWGWThreads } from 'scripts/helpers/thread_calc_helper.js';
 const minimumHackChance = 0.3;
 
 export function getHackTarget(ns, excludeTarget = []) {
@@ -21,14 +21,14 @@ export function getHackTarget(ns, excludeTarget = []) {
         let targetSuccess = result[1];
         let targetTime = result[2];
         let maxMoney = result[3];
-        let homeThreads = result[4];
+        let targetThreads = result[4];
 
         if (targetScore > maxScore) {
-            bestTarget = { name: target, score: targetScore, money: maxMoney, homeThreads: homeThreads, successRate: targetSuccess, time: targetTime};
+            bestTarget = { name: target, score: targetScore, money: maxMoney, threads: targetThreads, successRate: targetSuccess, time: targetTime};
             maxScore = targetScore;
         } else if (targetScore === maxScore) {
             if (target.MaxMoney > bestTarget.money && targetTime < bestTarget.time) {
-                bestTarget = { name: target, score: targetScore, money: maxMoney, homeThreads: homeThreads, successRate: targetSuccess, time: targetTime};
+                bestTarget = { name: target, score: targetScore, money: maxMoney, threads: targetThreads, successRate: targetSuccess, time: targetTime};
                 maxScore = targetScore;
             }
         }
@@ -46,9 +46,9 @@ export function getHackTargetList(ns) {
         let targetSuccess = result[1];
         let targetTime = result[2];
         let maxMoney = result[3];
-        let homeThreads = result[4];
+        let targetThreads = result[4];
 
-        let targetDetails = { name: target, score: targetScore, money: maxMoney, homeThreads: homeThreads, successRate: targetSuccess, time: targetTime};
+        let targetDetails = { name: target, score: targetScore, money: maxMoney, threads: targetThreads, successRate: targetSuccess, time: targetTime};
         serverList.push(targetDetails);
     }
     let resultList = serverList.filter((x) => {
@@ -63,28 +63,21 @@ export function getHackTargetList(ns) {
 
 function getTargetScore(ns, target){
     let player = ns.getPlayer();
-    let homeCores = ns.getServer("home").cpuCores;
     let server = ns.getServer(target);
     server.hackDifficulty = server.minDifficulty;
     server.moneyAvailable = server.moneyMax;
     let targetTime = ns.formulas.hacking.weakenTime(server, player);
     let targetSuccess = ns.formulas.hacking.hackChance(server, player);
-    //let threads = getMockHWGWThreads(ns, server, player);
-    //let hackResultThreads = threads[0] + threads[1] + threads[2] + threads[3];
-
-    server.hackDifficulty = server.hackDifficulty * 2;
-    server.moneyAvailable = server.moneyMax * 0.1;    
-    let mockBaseThreads = getMockWGWThreads(ns, server, homeCores);
-    let homePrepThreads = mockBaseThreads[0] + mockBaseThreads[1] + mockBaseThreads[2];
-    //let targetThreadTime = targetTime;// * totalThreads;
+    let threads = getMockHWGWThreads(ns, server, player);
+    let totalThreads = threads[0] + threads[1] + threads[2] + threads[3];
+    let targetThreadTime = targetTime * totalThreads;
 
     if (targetSuccess < minimumHackChance)
         return 0;
 
     let weightedMoney = server.moneyMax * targetSuccess;
-    let targetScore = weightedMoney / targetTime;//weightedMoney / targetThreadsTime;
-
-    return [targetScore, targetSuccess, targetTime, server.moneyMax, homePrepThreads];
+    let targetScore = weightedMoney / targetThreadTime;
+    return [targetScore, targetSuccess, targetThreadTime, server.moneyMax, totalThreads];
 }
 
 /** @param {NS} ns */
