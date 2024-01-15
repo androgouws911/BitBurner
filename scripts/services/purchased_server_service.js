@@ -9,6 +9,10 @@ let purchasedServers = [];
 /** @param {NS} ns */
 export async function main(ns) {
     disableLogs(ns);
+    ns.tail();
+    ns.atExit(() => {
+        ns.closeTail();
+    });
     purchasedServers = [];
     let maxServers = ns.getPurchasedServerLimit();
     let player = ns.getPlayer();
@@ -17,7 +21,7 @@ export async function main(ns) {
     purchasedServers = ns.getPurchasedServers();
     let purchasedCount = purchasedServers.length;
     while(purchasedCount < maxServers){
-        let currentMoney = player.money;
+        let currentMoney = ns.getPlayer().money;
         if (currentMoney > ramCostItem[1]*5){
             let purchase = ns.purchaseServer(`${serverNamePrefix}${purchasedCount}`,ramCostItem[0]);
             if (purchase !== undefined && purchase !== null && purchase !== ""){

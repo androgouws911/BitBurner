@@ -52,9 +52,9 @@ export async function main(ns) {
     ns.moveTail(1295, 0);
     ns.atExit(() => {
         ns.closeTail();
-        let wgw = ns.getRunningScript(Services.WGW, home);
-        if (wgw)
-            ns.kill(wgw.pid);
+        let hwgw5 = ns.getRunningScript(Services.HWGW5, home);
+        if (hwgw5)
+            ns.kill(hwgw5.pid);
     });
     //Required setup - log spam & port handler setup and clearing
     disableLogs(ns);

@@ -21,8 +21,8 @@ const ONE_MINUTE = 60000;
 /** @param {NS} ns */
 export async function main(ns) {
     ns.tail();
-    ns.resizeTail(600,400);
-    ns.moveTail(1750,185);
+    ns.resizeTail(600,500);
+    ns.moveTail(1750,900);
     ns.atExit(() => {
         ns.closeTail();
         let hwgw = ns.getRunningScript(Services.HWGW, home);
@@ -33,7 +33,6 @@ export async function main(ns) {
     await ns.sleep(TEN_SECONDS);
     while (true){        
         getMaxthreads(ns);
-        let cores = ns.getServer(home).cpuCores;
         let data = await readFromPort(ns, _port_list.WGW_THREADS);
         if (data == null){
             await ns.sleep(HALF_SECOND);
@@ -42,42 +41,16 @@ export async function main(ns) {
         updateThreads(ns);
         let endTime;        
         let currentTime = new Date().getTime();
-        let post = await getWGWPostData(ns, data.name, cores);
+        let post = await getWGWPostData(ns, data.name, 1);
         let threads = post.W1Threads + post.W2Threads + post.GThreads;
         let player = ns.getPlayer();
         let server = ns.getServer(data.name);
-        let batchComplete = true;
         if (threads > 0){
             let batchList = getBatchList(post);
-            batchComplete = await executeThreadsToServers(ns, batchList, data.name);
+            await executeThreadsToServers(ns, batchList, data.name);
             let weakT = ns.formulas.hacking.weakenTime(server, player);
             currentTime = new Date().getTime();
             endTime = currentTime + weakT + TEN_SECONDS;
-            if (!batchComplete){
-                let ePost = await getWGWPostData(ns, data.name, 1);
-                let eThreads = post.W1Threads + post.W2Threads + post.GThreads;
-                let eBatchList = getBatchList(ePost);
-                let purchasedServers = ns.getPurchasedServers();
-                purchasedServers.splice(0, 15);
-                let maxEThreads = purchasedServers.reduce(
-                    (total, x) => { return total + ns.getServerMaxRam(x); }, 0
-                );
-                if (maxEThreads < eThreads){
-                    ns.printf(`Failed to batch ${data.name} not enough threads (incl. emergency)`);
-                    continue;
-                }
-                let result = await emergencyBatchToServers(ns, eBatchList, data.name, purchasedServers);
-                let weakT = ns.formulas.hacking.weakenTime(server, player);
-                currentTime = new Date().getTime();
-                endTime = currentTime + weakT + TEN_SECONDS;
-                if (!result){
-                    data.state = state.Hacked;
-                    data.time = endTime;
-                    ns.printf(`Need more threads ${data.name} - ${ns.tFormat(data.time - new Date().getTime())}`);
-                    await writeToPort(ns, _port_list.HANDLER_PORT,data);
-                    continue;
-                }
-            }
         }
         else{
             ns.printf(`No prep required: ${data.name}`);
@@ -105,6 +78,7 @@ async function executeThreadsToServers(ns, batchList, target) {
         let action = batch[0];
         let delay = batch[2];
         let counter = 0;
+        serverObjects.sort((a, b) => b.AvailableThreads - a.AvailableThreads);
         while (counter < threadsNeeded) {
             if (getAvailableThreads() === 0)
                 break;
@@ -136,61 +110,9 @@ async function executeThreadsToServers(ns, batchList, target) {
         
         let actionString = `${x[0].slice(x[0].length-7, x[0].length-3)}`;
         let paddedThreads = `${x[2]}`.padEnd(5, " ");
-        ns.printf(`${target} - A:${actionString} - T:${paddedThreads} - D:${x[3][1]}`);
+        ns.printf(`A:${actionString} - T:${paddedThreads} - D:${x[3][1]}`);
         ns.exec(x[0], x[1], x[2], ...x[3]);
     });
-    return true;
-}
-
-async function emergencyBatchToServers(ns, batchList, target, servers) {
-    let threadsUsed = 0;
-    let execBuilder = [];   
-    let totalThreadsNeeded = 0; 
-    let threadsAvailable = getAvailableEmergencyThreads(ns, servers);
-    for (let batch of batchList){
-        let threadsNeeded = batch[1];
-        totalThreadsNeeded += threadsNeeded;
-        let currentLeft = threadsNeeded;
-        let action = batch[0];
-        let delay = batch[2];
-        let counter = 0;
-        while (counter < threadsNeeded) {                
-            if (threadsUsed >= threadsAvailable)
-                break;        
-
-            servers.some((x) => {
-                if (currentLeft === 0)
-                    return;
-
-                let xRam = (ns.getServerMaxRam(x) - ns.getServerUsedRam(x));
-                let xThreads = Math.floor(xRam / SCRIPT_RAM);
-                if (xThreads < 5)
-                    return;
-                
-                let useThreads = currentLeft >= xThreads ? xThreads : currentLeft;
-                currentLeft -= useThreads;
-                let randomNumber = getRandomNumber();
-                let execArgs = [target, delay, randomNumber];
-                execBuilder.push([action, x, useThreads, execArgs]);
-                counter += useThreads;
-                threadsUsed+=useThreads;
-                if (currentLeft === 0)
-                    return;
-            });
-
-            await ns.sleep(1000);
-        }
-    }    
-
-    execBuilder.forEach((x) => {
-        let actionString = `${x[0].slice(x[0].length-7, x[0].length-3)}`;
-        let paddedThreads = `${x[2]}`.padEnd(5, " ");
-        ns.printf(`${target} - A:${actionString} - T:${paddedThreads} - D:${x[3][1]}`);
-        ns.exec(x[0], x[1], x[2], ...x[3]);
-    });
-
-    if (totalThreadsNeeded < threadsUsed)
-        return false;
     return true;
 }
 
@@ -217,11 +139,6 @@ function getAvailableThreads(){
         return total + server.AvailableThreads; }, 0);
 }
 
-function getAvailableEmergencyThreads(ns, list){
-    return list.reduce((total, server) => {
-        return total + (ns.getServerMaxRam(server) - ns.getServerUsedRam(server)); }, 0)
-}
-
 function updateThreads(ns) {
     serverObjects.forEach((x) => {
         x.UsedThreads = calcHomeUsedThreads(ns)
@@ -237,6 +154,13 @@ function getMaxthreads(ns) {
     let maxThreads = Math.floor(effectiveMax / SCRIPT_RAM);
 
     serverObjects.push(new ThreadServer(home, maxThreads, 0));
+
+    let purchasedServers = ns.getPurchasedServers();
+    purchasedServers.forEach((x) => {
+        let maxRam = ns.getServerMaxRam(x);
+        let threads = Math.floor(maxRam / SCRIPT_RAM);
+        serverObjects.push(new ThreadServer(x, threads, 0));
+    });
 }
 
 function getRandomNumber() {

@@ -10,6 +10,10 @@ let _keepAlive = true;
 /** @param {NS} ns */
 export async function main(ns) {
     spamfilter(ns);
+    ns.tail();
+    ns.atExit(() => {
+        ns.closeTail();
+    });
     _keepAlive = true;
     let currentCount = ns.hacknet.numNodes();
     if (currentCount === undefined || currentCount == null || currentCount < 1)

@@ -12,7 +12,7 @@ const state = {
 };
 
 let serverObjects = [];
-const TENTH_SECOND = 100;
+const DESYNC_DELAY = 50;
 const QUARTER_SECOND = 250;
 const HALF_SECOND = 500;
 const ONE_SECOND = 1000;
@@ -27,15 +27,16 @@ let DELAY = SPACING / 5;
 export async function main(ns) {
     ns.tail();
     ns.resizeTail(600,180);
-    ns.moveTail(1750,0);
+    ns.moveTail(1750,720);
     ns.atExit(() => {
         ns.closeTail();
-        let hwgw2 = ns.getRunningScript(Services.HWGW2, home);
-        if (hwgw2)
-            ns.kill(hwgw2.pid);
+        let hp = ns.getRunningScript(Services.HackHandler, home);
+            if (hp)
+                ns.kill(hp.pid);
     });
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
+    await ns.sleep(DESYNC_DELAY);
     while (true){
         getMaxthreads(ns);
         let maxThreads = getAvailableThreads();
@@ -207,7 +208,7 @@ function getMaxthreads(ns) {
     serverObjects = [];
     let purchasedServers = ns.getPurchasedServers(ns);    
     if (purchasedServers.length == 25)
-        purchasedServers = purchasedServers.slice(0,10);
+        purchasedServers = purchasedServers.slice(20,25);
     purchasedServers.forEach((x) => {
         let maxRam = ns.getServerMaxRam(x);
         let maxThreads = Math.floor(maxRam / SCRIPT_RAM);
@@ -244,8 +245,7 @@ const threads_threshold = [
     { threads: 100, value: TEN_SECONDS },
     { threads: 10000, value: ONE_SECOND },
     { threads: 100000, value: HALF_SECOND },
-    { threads: 10000000, value: QUARTER_SECOND },
-    { threads: Infinity, value: TENTH_SECOND },
+    { threads: Infinity, value: QUARTER_SECOND },
 ];
 
 

@@ -7,6 +7,10 @@ let purchasedServers = [];
 
 /** @param {NS} ns */
 export async function main(ns) {
+    ns.tail();
+    ns.atExit(() => {
+        ns.closeTail();
+    });
     purchasedServers = [];
     const maxRamPossible = sizeFromExponent(20);
     let purchasedServerNames = ns.getPurchasedServers();
