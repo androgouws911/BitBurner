@@ -12,7 +12,6 @@ export async function main(ns) {
         ns.killall(x);
     });
 
-    ns.tprintf("KillServers Completed.");
     writeToPort(ns, _port_list.MAIN_SERVICE_PORT, true);
 }
 

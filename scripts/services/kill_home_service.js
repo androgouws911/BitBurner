@@ -19,7 +19,6 @@ export async function main(ns) {
                 ns.kill(x.pid);
         });
     }
-    ns.tprintf("KillHome Completed.")
     writeToPort(ns, _port_list.MAIN_SERVICE_PORT, true);
 }
 /** @param {NS} ns */

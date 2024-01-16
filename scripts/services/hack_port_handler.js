@@ -2,6 +2,7 @@ import { getHackTargetList } from 'scripts/handler/get_best_hack_server.js';
 import { writeToPort } from 'scripts/handler/port_handler.js';
 import { Action, Services } from 'scripts/data/file_list.js';
 import { _port_list } from 'scripts/enums/ports.js';
+import { getHWGWAllocation, getWGWAllocation, setAllocations } from 'scripts/helpers/hwgw_wgw_server_alloc_helper';
 
 //#region Constants
 const state = {
@@ -22,7 +23,7 @@ const capState = {
     Mid: 3
 }
 
-const MAX_TARGETS = 30;
+const MAX_TARGETS = 15;
 const TENTH_SECOND = 100;
 const HALF_SECOND = 500;
 const ONE_SECOND = 1000;
@@ -53,6 +54,7 @@ let toBeKilled;
 let capacityCount;
 let capacityState;
 let lastInstanceCheck;
+let lastAllocChange;
 // #endregion
 
 /** @param {NS} ns */
@@ -68,6 +70,8 @@ export async function main(ns) {
     capacityCount = 0;
     capacityState = capState.Mid;//Default to Mid prior to normalization
     lastInstanceCheck = new Date().getTime() + ONE_MINUTE;//Wait for 1min to allow for normalization of servers
+    lastAllocChange = new Date().getTime();
+    setAllocations(ns, 12,25);
 // #endregion
 // #region Tail view setup & exit handling (Kill all 3 services)
     ns.tail();
@@ -287,7 +291,7 @@ async function refreshTargets(ns){
     let tempActiveStoreList = [];//Temp store current active list
     activeList.forEach((x) => tempActiveStoreList.push(x));
     let hackLevel = ns.getHackingLevel();
-    if (hackLevel < 750)
+    if (hackLevel < 1000)
         targetList.sort((a, b) => a.time - b.time);
     else
         targetList.sort((a, b) => b.score - a.score);
@@ -310,11 +314,12 @@ async function refreshTargets(ns){
             deactivateList.push(x);
         }
     });
-
     //Reset state for next refresh
     lastRefreshed = new Date().getTime();
     ns.printf(`Refresh completed (Next: ${ns.tFormat(REFRESH_PERIOD)})`);
     refreshState = rstate.Waiting;
+
+    setServerAllocations(ns);
 }
 // #endregion
 // #region Script Validations
@@ -429,9 +434,7 @@ function updateInstanceRequired(ns){
 function checkCurrentCapacity(ns){
     let lowLim = 0.25;
     let highLim = 0.85;
-    let purchasedServers = ns.getPurchasedServers();
-    purchasedServers = purchasedServers.slice(0, purchasedServers.length-1);
-
+    let purchasedServers = getHWGWAllocation(ns);
     let totalUsed = purchasedServers.reduce((total, server) => { return total + ns.getServerUsedRam(server); }, 0);
     let totalMax = purchasedServers.reduce((total, server) => { return total + ns.getServerMaxRam(server); }, 0);
 
@@ -442,6 +445,42 @@ function checkCurrentCapacity(ns){
         return capState.Low;
     else
         return capState.High;
+}
+
+function setServerAllocations(ns){   
+    let currentTime = new Date().getTime();
+    
+    if (lastAllocChange + HALF_MINUTE > currentTime)
+        return;
+    
+    let hwgwAlloc = getHWGWAllocation(ns);
+    let wgwAlloc = getWGWAllocation(ns);
+    let hwgwCount = hwgwAlloc.length;
+    let wgwCount = wgwAlloc.length;
+    let totalHWGWUsed = hwgwAlloc.reduce((total, server) => { return total + ns.getServerUsedRam(server); }, 0);
+    let totalHWGWMax = hwgwAlloc.reduce((total, server) => { return total + ns.getServerMaxRam(server); }, 0);
+    let totalWGWUsed = wgwAlloc.reduce((total, server) => { return total + ns.getServerUsedRam(server); }, 0);
+    let totalWGWMax = wgwAlloc.reduce((total, server) => { return total + ns.getServerMaxRam(server); }, 0);
+    let hwgwRatio = totalHWGWUsed / totalHWGWMax;
+    let wgwRatio = totalWGWUsed / totalWGWMax;
+
+    if (hwgwRatio < 0.5 && wgwRatio < 0.5)
+        return;
+    
+    if (hwgwRatio >= wgwRatio)
+        wgwCount--;
+    else
+        wgwCount++;
+
+    if (wgwCount > 23)
+        wgwCount = 23;
+
+    if (wgwCount < 1)
+        wgwCount = 1;
+    
+    setAllocations(ns, wgwCount, 25);
+    lastAllocChange = new Date().getTime();
+    ns.printf(`New Alloc: H:${25-wgwCount} | W: ${wgwCount} (P:${hwgwCount}|${25-hwgwCount})`);
 }
 // #endregion
 // #region Instance Creation / Update / Removal
@@ -537,8 +576,7 @@ function getRefreshPeriod(playerHackLevel) {
 
 const refresh_threshold = [
     { level: 100, value: HALF_MINUTE },
-    { level: 1999, value: ONE_MINUTE },
-    { level: Infinity, value: TEN_MINUTES },
+    { level: Infinity, value: ONE_MINUTE },
 ];
 
 function disableLogs(ns){

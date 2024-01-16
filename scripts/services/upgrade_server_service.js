@@ -14,11 +14,8 @@ export async function main(ns) {
     purchasedServers = [];
     const maxRamPossible = sizeFromExponent(20);
     let purchasedServerNames = ns.getPurchasedServers();
-    if (purchasedServerNames.length < 1) {
-        ns.tprintf("ERROR: Upgrade Servers Service running with no purchased servers");
+    if (purchasedServerNames.length < 1)
         return;
-    }
-
     disableLogs(ns);
     getPurchasedServerObjects(ns, purchasedServerNames);
     let serversNotMaxed = true;

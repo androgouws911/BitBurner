@@ -4,6 +4,7 @@ import { SCRIPT_RAM } from 'scripts/handler/general_handler.js';
 import { ThreadServer } from 'scripts/models/thread_models.js';
 import { _port_list } from 'scripts/enums/ports.js';
 import { Action, Services } from 'scripts/data/file_list.js';
+import { getHWGWAllocation } from 'scripts/helpers/hwgw_wgw_server_alloc_helper';
 
 const state = {
     Ready : 1,
@@ -24,7 +25,7 @@ const home = "home";
 let SPACING = TEN_SECONDS;
 let DELAY = 20;
 let posX = 1750;
-let posY = 0;
+let sizeY = 180;
 let instanceCount = 1;
 let instanceID = 0;
 
@@ -46,14 +47,14 @@ export async function main(ns) {
         });
     }
 
-    let finalX = getTailPositions(instanceID);
+    let finalY = getTailPositions(instanceID);
     ns.tail();
-    ns.resizeTail(600,180);
-    ns.moveTail(finalX,posY);
+    ns.resizeTail(600,sizeY);
+    ns.moveTail(posX,finalY);
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
     while (true){
-        getMaxthreads(ns);
+        fetchThreads(ns);
         let maxThreads = getMaxThreads();
         SPACING = getSpacing(maxThreads);
     
@@ -88,7 +89,7 @@ export async function main(ns) {
             let endLoopTime = new Date().setTime(currentTime + safeWeakTiming);
             let currentDate = new Date();
             let timeFormatted = currentDate.toLocaleTimeString(`sv`);
-            ns.printf(`${timeFormatted} - Hacking ${data.name}`);
+            ns.printf(`${timeFormatted} - Hacking ${data.name} - PServerAlloc: ${serverObjects.length}`);
             while (currentTime <= endLoopTime){
                 currentTime = new Date().getTime();
                 if (!targetInIdealState(ns, data.name)){
@@ -99,7 +100,7 @@ export async function main(ns) {
                 let availableThreads = getAvailableThreads();
                 while (availableThreads < threads){
                     currentTime = new Date().getTime();
-                    ns.printf(`${new Date(currentTime).toLocaleTimeString('sv')} - Not enough threads to post(E:${ns.tFormat(endLoopTime-currentTime)})`)
+                    ns.printf(`${new Date(currentTime).toLocaleTimeString('sv')} - Not enough threads to post(E:${ns.tFormat(endLoopTime-currentTime)}11)`)
                     updateThreads(ns);
                     availableThreads = getAvailableThreads();
                     await ns.sleep(SPACING);
@@ -141,9 +142,9 @@ export async function main(ns) {
 
 function getTailPositions(id){
     if (id > 5)
-        return 5 * posX;
+        return 5 * sizeY;
     
-    return id * posX;
+    return (id-1) * sizeY;
 }
 
 function targetInIdealState(ns, targetName){
@@ -245,24 +246,19 @@ function getBatchItem(delay, threads, action){
 }
 
 function updateThreads(ns) {
+    fetchThreads(ns);
     serverObjects.forEach((x) => {
         x.UsedThreads = calcServerUsedThreads(ns, x.ServerName);
         x.AvailableThreads = x.MaxThreads - x.UsedThreads;
     });
 }
 
-function getMaxthreads(ns) {
+function fetchThreads(ns) {
     getInstanceCount(ns);
     serverObjects = []; 
-    let purchasedServers = ns.getPurchasedServers();
     let serversAllowed = [];
-    let allocate;
-    let hackLevel = ns.getHackingLevel();
-    if (hackLevel < 750)
-        allocate = purchasedServers.slice(0, purchasedServers.length-5); //allocate last p.server
-    else
-        allocate = purchasedServers.slice(0, purchasedServers.length-1);
-
+    let allocate = getHWGWAllocation(ns);
+    
     if (instanceCount === 1)
         serversAllowed = allocate;
     else{
@@ -295,6 +291,9 @@ function getMaxthreads(ns) {
 
 function getInstanceCount(ns){
     let homePs = ns.ps(home);
+    if (homePs.length < 1)
+        return 0;
+    
     let count = homePs.reduce((acc, obj) => {
         if (obj.filename === Services.HWGW) {
           return acc + 1;
@@ -339,9 +338,9 @@ function getSpacing(maxThreads) {
 
 const threads_threshold = [
     { threads: 100, value: TEN_SECONDS },
-    { threads: 100000, value: ONE_SECOND },
-    { threads: 1000000, value: HALF_SECOND },
-    { threads: 10000000, value: QUARTER_SECOND },
+    { threads: 10000, value: ONE_SECOND },
+    { threads: 100000, value: HALF_SECOND },
+    { threads: 1000000, value: QUARTER_SECOND },
     { threads: Infinity, value: TENTH_SECOND },
 ];
 

@@ -141,7 +141,7 @@ async function playerHasTheMoney(ns, amount, stat, index) {
 
 function roundDownToNearestTen(number) {
     return Math.floor(number / 10) * 10;
-  }
+}
 
 function isDivisibleBy10(number) {
     return number % 10 === 0;

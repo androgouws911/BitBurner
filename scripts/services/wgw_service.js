@@ -4,6 +4,7 @@ import { SCRIPT_RAM } from 'scripts/handler/general_handler.js';
 import { ThreadServer } from 'scripts/models/thread_models.js';
 import { _port_list } from 'scripts/enums/ports.js';
 import { Action, Services } from 'scripts/data/file_list.js';
+import { getWGWAllocation } from 'scripts/helpers/hwgw_wgw_server_alloc_helper';
 
 const state = {
     Ready : 1,
@@ -32,7 +33,7 @@ export async function main(ns) {
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
     while (true){        
-        getThreadsObjects(ns);
+        fetchThreads(ns);
         let maxThreads = getMaxThreads();
         let data = await readFromPort(ns, _port_list.WGW_THREADS);
         if (data == null){
@@ -47,7 +48,8 @@ export async function main(ns) {
         let player = ns.getPlayer();
         let server = ns.getServer(data.name);
         if (threads > 0){
-            ns.printf(`Mending ${data.name} [W1:${post.W1Threads}, G:${post.GThreads}, W2: ${post.W2Threads}]`);
+            ns.printf(`Mending ${data.name} - PServerAlloc: ${serverObjects.length}`);
+            ns.printf(`Total Threads: [W1:${post.W1Threads}, G:${post.GThreads}, W2: ${post.W2Threads}]`)
             let batchList = getBatchList(post);
             let toBePosted = true;
             while (toBePosted){
@@ -67,7 +69,7 @@ export async function main(ns) {
                         updateThreads(ns);
                         availableThreads = getAvailableThreads();
 
-                        if (availableThreads === maxThreads)
+                        if (availableThreads >= maxThreads)
                             break;
                     }            
                 }
@@ -77,7 +79,7 @@ export async function main(ns) {
             endTime = currentTime + weakT + TEN_SECONDS;
         }
         else{
-            ns.printf(`No prep required: ${data.name}`);
+            ns.printf(`No prep required: ${data.name} - PServerAlloc: ${serverObjects.length}`);
             endTime = currentTime;
         }
         data.state = state.Prepped;
@@ -99,7 +101,7 @@ async function executeThreadsToServers(ns, batchList, target) {
         let action = batch[0];
         let delay = batch[2];
         let counter = 0;
-        serverObjects.sort((a, b) => b.AvailableThreads - a.AvailableThreads);
+        serverObjects.sort((a, b) => b.ServerName - a.ServerName);
         while (counter < threadsNeeded) {
             if (currentLeft === 0 || getAvailableThreads() <= 0)
                 break;
@@ -218,6 +220,7 @@ function getMaxThreads(){
 }
 
 function updateThreads(ns) {
+    fetchThreads(ns);
     serverObjects.forEach((x) => {
         x.UsedThreads = calcServerUsedThreads(ns, x.ServerName);
         x.AvailableThreads = x.MaxThreads - x.UsedThreads;
@@ -230,17 +233,10 @@ function calcServerUsedThreads(ns, name) {
     return Math.ceil(ram / SCRIPT_RAM);
 }
 
-function getThreadsObjects(ns) {
+function fetchThreads(ns) {
     serverObjects = [];
-    let purchasedServers = ns.getPurchasedServers(ns);  
-    let serversAllowed; 
-    let hackLevel = ns.getHackingLevel();
-    if (hackLevel < 750)
-        serversAllowed = purchasedServers.slice(purchasedServers.length-5); //allocate last p.server
-    else
-        serversAllowed = purchasedServers.slice(purchasedServers.length-1);
-    
-    serversAllowed.forEach((x) => {
+    let allocate = getWGWAllocation(ns);
+    allocate.forEach((x) => {
         let maxRam = ns.getServerMaxRam(x);
         let maxThreads = Math.floor(maxRam / SCRIPT_RAM);
         serverObjects.push(new ThreadServer(x, maxThreads, 0));
@@ -270,6 +266,7 @@ function disableLogs(ns){
     ns.disableLog("tail");
     ns.disableLog("moveTail");
     ns.disableLog("resizeTail");
+    ns.disableLog("getHackingLevel");
     ns.disableLog("getPlayer");
     ns.disableLog("getServer");
 }
