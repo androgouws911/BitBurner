@@ -22,8 +22,8 @@ const ONE_MINUTE = 60000;
 /** @param {NS} ns */
 export async function main(ns) {
     ns.tail();
-    ns.resizeTail(600,400);
-    ns.moveTail(1750,185);
+    ns.resizeTail(625,720);
+    ns.moveTail(665,0);
     ns.atExit(() => {
         ns.closeTail();
         let hwgw = ns.getRunningScript(Services.HWGW, home);
@@ -48,7 +48,7 @@ export async function main(ns) {
         let player = ns.getPlayer();
         let server = ns.getServer(data.name);
         if (threads > 0){
-            ns.printf(`Mending ${data.name} - PServerAlloc: ${serverObjects.length}`);
+            ns.printf(`Mending ${data.name}`);
             ns.printf(`Total Threads: [W1:${post.W1Threads}, G:${post.GThreads}, W2: ${post.W2Threads}]`)
             let batchList = getBatchList(post);
             let toBePosted = true;
@@ -79,7 +79,7 @@ export async function main(ns) {
             endTime = currentTime + weakT + TEN_SECONDS;
         }
         else{
-            ns.printf(`No prep required: ${data.name} - PServerAlloc: ${serverObjects.length}`);
+            ns.printf(`No prep required: ${data.name}`);
             endTime = currentTime;
         }
         data.state = state.Prepped;

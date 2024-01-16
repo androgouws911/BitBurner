@@ -49,7 +49,7 @@ export async function main(ns) {
 
     let finalY = getTailPositions(instanceID);
     ns.tail();
-    ns.resizeTail(600,sizeY);
+    ns.resizeTail(625,sizeY);
     ns.moveTail(posX,finalY);
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
@@ -89,7 +89,7 @@ export async function main(ns) {
             let endLoopTime = new Date().setTime(currentTime + safeWeakTiming);
             let currentDate = new Date();
             let timeFormatted = currentDate.toLocaleTimeString(`sv`);
-            ns.printf(`${timeFormatted} - Hacking ${data.name} - PServerAlloc: ${serverObjects.length}`);
+            ns.printf(`${timeFormatted} - Hacking ${data.name}`);
             while (currentTime <= endLoopTime){
                 currentTime = new Date().getTime();
                 if (!targetInIdealState(ns, data.name)){
@@ -100,7 +100,7 @@ export async function main(ns) {
                 let availableThreads = getAvailableThreads();
                 while (availableThreads < threads){
                     currentTime = new Date().getTime();
-                    ns.printf(`${new Date(currentTime).toLocaleTimeString('sv')} - Not enough threads to post(E:${ns.tFormat(endLoopTime-currentTime)}11)`)
+                    ns.printf(`${new Date(currentTime).toLocaleTimeString('sv')} - Not enough threads to post(E:${ns.tFormat(endLoopTime-currentTime)})`)
                     updateThreads(ns);
                     availableThreads = getAvailableThreads();
                     await ns.sleep(SPACING);

@@ -10,13 +10,13 @@ let purchasedServers = [];
 export async function main(ns) {
     disableLogs(ns);
     ns.tail();
+    ns.resizeTail(850,200);
+    ns.moveTail(950, 1155);
     ns.atExit(() => {
         ns.closeTail();
     });
     purchasedServers = [];
     let maxServers = ns.getPurchasedServerLimit();
-    let player = ns.getPlayer();
-
     let ramCostItem = getCheapestServer(ns);
     purchasedServers = ns.getPurchasedServers();
     let purchasedCount = purchasedServers.length;
@@ -38,6 +38,8 @@ export async function main(ns) {
 function disableLogs(ns){
     ns.disableLog("disableLog");
     ns.disableLog("sleep");
+    ns.disableLog("moveTail");
+    ns.disableLog("resizeTail");
 }
 
 /** @params {NS} ns */

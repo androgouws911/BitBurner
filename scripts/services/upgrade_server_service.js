@@ -7,7 +7,10 @@ let purchasedServers = [];
 
 /** @param {NS} ns */
 export async function main(ns) {
+    disableLogs(ns);
     ns.tail();
+    ns.resizeTail(850,200);
+    ns.moveTail(950, 1155);
     ns.atExit(() => {
         ns.closeTail();
     });
@@ -16,7 +19,6 @@ export async function main(ns) {
     let purchasedServerNames = ns.getPurchasedServers();
     if (purchasedServerNames.length < 1)
         return;
-    disableLogs(ns);
     getPurchasedServerObjects(ns, purchasedServerNames);
     let serversNotMaxed = true;
     while (serversNotMaxed){
@@ -108,4 +110,6 @@ function disableLogs(ns){
     ns.disableLog("sleep");
     ns.disableLog("getServerMaxRam");
     ns.disableLog("getPurchasedServers");
+    ns.disableLog("moveTail");
+    ns.disableLog("resizeTail");
 }

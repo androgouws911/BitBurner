@@ -75,7 +75,7 @@ export async function main(ns) {
 // #endregion
 // #region Tail view setup & exit handling (Kill all 3 services)
     ns.tail();
-    ns.resizeTail(450,585);
+    ns.resizeTail(450,720);
     ns.moveTail(1295, 0);
     ns.atExit(() => {
         ns.closeTail();
@@ -432,7 +432,7 @@ function updateInstanceRequired(ns){
 }
 
 function checkCurrentCapacity(ns){
-    let lowLim = 0.25;
+    let lowLim = 0.35;
     let highLim = 0.85;
     let purchasedServers = getHWGWAllocation(ns);
     let totalUsed = purchasedServers.reduce((total, server) => { return total + ns.getServerUsedRam(server); }, 0);

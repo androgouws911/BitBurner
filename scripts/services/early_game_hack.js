@@ -1,4 +1,4 @@
-import { filteredCrawl } from "scripts/handler/server_crawl";
+import { crawl } from "scripts/handler/server_crawl";
 import { Action } from "scripts/data/file_list";
 const home = "home";
 const TEN_SECONDS = 10000;
@@ -12,28 +12,25 @@ export async function main(ns) {
     hackRam = ns.getScriptRam(Action.EarlyHack);
 
     while (true){
-        let serverList = getFilteredList(ns);
+        let serverList = getServerList(ns);
         await prepServers(ns, serverList);
         await ns.sleep(TEN_SECONDS);
     }
 }
 
-function getFilteredList(ns){
-    let purchasedServers = ns.getPurchasedServers();
-    let filterList = [home];
-    purchasedServers.forEach((x) => {
-        let index = filterList.findIndex(y => y === x);
-        if (index === -1)
-            filterList.push(x);
-    });
-
-    let serverList = filteredCrawl(ns, filterList);
+function getServerList(ns){
+    let serverList = crawl(ns);
     return serverList;
 }
 
 async function prepServers(ns, serverList){
     for (let server of serverList){
         if (!ns.serverExists(server))
+            continue;
+
+        let playerLevel = ns.getHackingLevel();
+        let reqLevel = ns.getServerRequiredHackingLevel(server);
+        if (reqLevel > playerLevel)
             continue;
 
         let maxRam = ns.getServerMaxRam(server);
@@ -56,11 +53,26 @@ async function prepServers(ns, serverList){
         await ns.sleep(ONE_SECOND);
 
         let maxThreads = Math.floor(ns.getServerMaxRam(server) / hackRam);
-        if (!ns.isRunning(Action.EarlyHack, server, ...[server])){
-            ns.exec(Action.EarlyHack, server, maxThreads, ...[server]);
-            ns.printf(`${server} - Rooted and working for us`);
-        }
+        let purchasedServers = ns.getPurchasedServers();
+        if (server === home || purchasedServers.includes(server)){
+            if (playerLevel < 5)
+                continue;
 
+            if (server === home)
+                maxThreads = Math.floor((ns.getServerMaxRam(home) - ns.getServerUsedRam(home)) / hackRam);
+            let target = "sigma-cosmetics ";
+            if (!ns.isRunning(Action.EarlyHack, server, ...[target])){
+                ns.exec(Action.EarlyHack, server, maxThreads, ...[target]);
+                ns.printf(`${server} working on ${target}`);
+            }
+        }
+        else{
+            if (!ns.isRunning(Action.EarlyHack, server, ...[server])){
+                ns.exec(Action.EarlyHack, server, maxThreads, ...[server]);
+                ns.printf(`${server} - Rooted and working for us`);
+            }
+        }
+            
         await ns.sleep(TENTH_SECOND);
     }
 }
