@@ -47,19 +47,29 @@ export async function main(ns) {
         let player = ns.getPlayer();
         let server = ns.getServer(data.name);
         if (threads > 0){
+            ns.printf(`Mending ${data.name} [W1:${post.W1Threads}, G:${post.GThreads}, W2: ${post.W2Threads}]`);
             let batchList = getBatchList(post);
             let toBePosted = true;
             while (toBePosted){
                 let result = await executeThreadsToServers(ns, batchList, data.name);
                 if (result === null)
                     toBePosted = false;
-                else{
-                    let remaining = result.reduce((rem, x) => { return rem + x[2]; }, 0);
-                    ns.printf(`Not enough threads to complete post. ${remaining} threads remaining. (Waiting 10 seconds for more threads)`);       
+                else{  
                     let updatedPost = calculateRemaingPostData(result, post);
-                    batchList = getBatchList(updatedPost);                    
-                    await ns.sleep(TEN_SECONDS);
+                    batchList = getBatchList(updatedPost);
+                    threads = post.W1Threads + post.W2Threads + post.GThreads;
+                    post = updatedPost;
                     updateThreads(ns);
+                    let availableThreads = getAvailableThreads();
+                    let minThread = threads*0.2;
+                    while (availableThreads < minThread){
+                        await ns.sleep(ONE_SECOND);
+                        updateThreads(ns);
+                        availableThreads = getAvailableThreads();
+
+                        if (availableThreads === maxThreads)
+                            break;
+                    }            
                 }
             }
             let weakT = ns.formulas.hacking.weakenTime(server, player);
@@ -128,7 +138,6 @@ async function executeThreadsToServers(ns, batchList, target) {
 }
 
 function calculateRemaingPostData(execBuilder, postData){
-    debugger;
     let execValues = getExecBuilderValues(execBuilder);
 
     let w1ExecutedItem = findItemByActionTypeAndSecondElement(Action.Weak, postData.W1Delay, execValues);
@@ -210,18 +219,32 @@ function getMaxThreads(){
 
 function updateThreads(ns) {
     serverObjects.forEach((x) => {
-        x.UsedThreads = calcHomeUsedThreads(ns)
+        x.UsedThreads = calcServerUsedThreads(ns, x.ServerName);
         x.AvailableThreads = x.MaxThreads - x.UsedThreads;
     });
+}
+function calcServerUsedThreads(ns, name) {
+    let ram = ns.getServerUsedRam(name);
+    if (ram === 0) return 0;
+
+    return Math.ceil(ram / SCRIPT_RAM);
 }
 
 function getThreadsObjects(ns) {
     serverObjects = [];
-    let purchasedServers = ns.getPurchasedServers(ns);   
-    let serversAllowed = purchasedServers[purchasedServers.length-1]; //allocate last p.server
-    let maxRam = ns.getServerMaxRam(serversAllowed);
-    let maxThreads = Math.floor(maxRam / SCRIPT_RAM);
-    serverObjects.push(new ThreadServer(serversAllowed, maxThreads, 0));
+    let purchasedServers = ns.getPurchasedServers(ns);  
+    let serversAllowed; 
+    let hackLevel = ns.getHackingLevel();
+    if (hackLevel < 750)
+        serversAllowed = purchasedServers.slice(purchasedServers.length-5); //allocate last p.server
+    else
+        serversAllowed = purchasedServers.slice(purchasedServers.length-1);
+    
+    serversAllowed.forEach((x) => {
+        let maxRam = ns.getServerMaxRam(x);
+        let maxThreads = Math.floor(maxRam / SCRIPT_RAM);
+        serverObjects.push(new ThreadServer(x, maxThreads, 0));
+    });
 }
 
 function getRandomNumber() {
@@ -231,53 +254,6 @@ function getRandomNumber() {
     let randomNumber = min + randomDecimal * (max - min + 1);
     return Math.floor(randomNumber);
 }
-
-function calcHomeUsedThreads(ns) {
-    let usedRam = ns.getServerUsedRam(home);
-    let reservedRam = calculateReserve(ns);
-    let serviceRam = usedRam - reservedRam;
-
-    return Math.ceil(serviceRam / SCRIPT_RAM);
-}
-
-const ignoreList = [Action.Hack, Action.Grow, Action.Weak];
-function calculateReserve(ns){
-    let list  = ns.ps(home);
-    let result = 0;
-    for (let item of list){
-        if (ignoreList.includes(item.filename))
-            continue;
-
-        result += ns.getScriptRam(item.filename);
-    }
-
-    return result;
-}
-
-function calculateReserveExtra(maxRam, reservedSpace) {
-    let adaptedRam = maxRam - reservedSpace;
-  
-    for (const threshold of homeFreeSpaceThresholds) {
-      if (adaptedRam <= threshold.maxRamThreshold) {
-        return threshold.value;
-      }
-    }
-  
-    return 0; 
-  }
-
-const homeFreeSpaceThresholds = [
-    { maxRamThreshold: 0, value: 0 },
-    { maxRamThreshold: 10, value: 2 },
-    { maxRamThreshold: 50, value: 10 },
-    { maxRamThreshold: 100, value: 50 },
-    { maxRamThreshold: 500, value: 100 },
-    { maxRamThreshold: 1000, value: 200 },
-    { maxRamThreshold: 2000, value: 300 },
-    { maxRamThreshold: 4000, value: 400 },
-    { maxRamThreshold: 8000, value: 500 },
-    { maxRamThreshold: Infinity, value: 1024 },
-];
 
 function disableLogs(ns){
     ns.disableLog("disableLog");

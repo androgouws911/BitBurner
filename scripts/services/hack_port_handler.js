@@ -118,7 +118,6 @@ export async function main(ns) {
             while (mainHandler.peek() !== NULL_MESSAGE){            
                 let portRead = mainHandler.read();
                 let data = JSON.parse(portRead);
-                
                 if (toBeKilled.length > 0)
                     killRequiredInstance(ns, data.name);
                 
@@ -287,7 +286,12 @@ async function refreshTargets(ns){
     ns.printf(`Comparing ${targetList.length} targets`);
     let tempActiveStoreList = [];//Temp store current active list
     activeList.forEach((x) => tempActiveStoreList.push(x));
-
+    let hackLevel = ns.getHackingLevel();
+    if (hackLevel < 750)
+        targetList.sort((a, b) => a.time - b.time);
+    else
+        targetList.sort((a, b) => b.score - a.score);
+    
     for (let target of targetList){
         if (activeList.includes(target.name)){//Target should still be active
             let index = tempActiveStoreList.findIndex(item => item === target.name);

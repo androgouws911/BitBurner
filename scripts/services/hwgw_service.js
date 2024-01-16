@@ -125,7 +125,9 @@ export async function main(ns) {
             }
         }
         else{    
-            ns.printf(`Not Ready to Hack: ${data.name}`);   
+            let secString = `S:${ns.formatNumber(ns.getServerSecurityLevel(data.name), 2)}/${ns.getServerMinSecurityLevel(data.name)}`;
+            let monString = `$: ${ns.formatNumber(ns.getServerMoneyAvailable(data.name),2)}/${ns.formatNumber(ns.getServerMaxMoney(data.name),2)}`;
+            ns.printf(`Not Ready to Hack: ${data.name} - ${secString} | M: ${monString}`);   
             endTime = currentTime;
         }
 
@@ -254,10 +256,17 @@ function getMaxthreads(ns) {
     serverObjects = []; 
     let purchasedServers = ns.getPurchasedServers();
     let serversAllowed = [];
+    let allocate;
+    let hackLevel = ns.getHackingLevel();
+    if (hackLevel < 750)
+        allocate = purchasedServers.slice(0, purchasedServers.length-5); //allocate last p.server
+    else
+        allocate = purchasedServers.slice(0, purchasedServers.length-1);
+
     if (instanceCount === 1)
-        serversAllowed = purchasedServers.slice(0,purchasedServers.length-1);
+        serversAllowed = allocate;
     else{
-        let allocateableServers = purchasedServers.slice(0, purchasedServers.length - 1);
+        let allocateableServers = allocate;
         let totalServers = allocateableServers.length;
         let serversPerInstance = Math.floor(totalServers / instanceCount);
         let extraServers = totalServers % instanceCount;
