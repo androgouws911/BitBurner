@@ -27,6 +27,7 @@ function printConnectedPath(ns, server1, server2){
     ns.tprintf(JSON.stringify(connection));
     let autoConnectString = connection.map(item => `connect ${item};`).join(' ');
     ns.tprintf(`${autoConnectString}`);
+    navigator.clipboard.writeText(`${autoConnectString} nuke`);
     ns.tprintf("-".repeat(50));
 }
 /** @param {NS} ns */
