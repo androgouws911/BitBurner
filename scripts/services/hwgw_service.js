@@ -24,8 +24,6 @@ const home = "home";
 
 let SPACING = TEN_SECONDS;
 let DELAY = 20;
-let posX = 1750;
-let sizeY = 180;
 let instanceCount = 1;
 let instanceID = 0;
 
@@ -37,7 +35,7 @@ export async function main(ns) {
             ns.closeTail();
             let hph = ns.getRunningScript(Services.HackHandler, home);
             if (hph)
-            ns.kill(hph.pid);
+                ns.kill(hph.pid);
         });
         instanceID = 1;
     }
@@ -47,10 +45,9 @@ export async function main(ns) {
         });
     }
 
-    let finalY = getTailPositions(instanceID);
     ns.tail();
-    ns.resizeTail(625,sizeY);
-    ns.moveTail(posX,finalY);
+    ns.resizeTail(300, 180);
+    ns.moveTail(calculateTailXPosition(instanceID),calculateTailYPosition(instanceID));
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
     while (true){
@@ -63,7 +60,6 @@ export async function main(ns) {
             await ns.sleep(HALF_SECOND);
             continue;
         }
-
 
         await postToHistoryPort(ns, data.name);
         updateThreads(ns);
@@ -84,11 +80,18 @@ export async function main(ns) {
             }
 
             let weakT = ns.formulas.hacking.weakenTime(server, player);
-            let safeWeakTiming = weakT * 0.95;
+            let safeWeakTiming = Math.ceil(weakT/1000);
+            safeWeakTiming = safeWeakTiming * 0.95;
+            safeWeakTiming = safeWeakTiming * 1000;
             let currentTime = new Date().getTime();
             let endLoopTime = new Date().setTime(currentTime + safeWeakTiming);
             let currentDate = new Date();
             let timeFormatted = currentDate.toLocaleTimeString(`sv`);
+            let serverObjString = "";
+            serverObjects.forEach((x) => serverObjString += `${x.ServerName} `);
+            serverObjString = serverObjString.trimEnd();
+            ns.printf(`AllocServers: ${serverObjString}`);
+            ns.printf(`${"-".repeat(25)}`);
             ns.printf(`${timeFormatted} - Hacking ${data.name}`);
             while (currentTime <= endLoopTime){
                 currentTime = new Date().getTime();
@@ -100,7 +103,8 @@ export async function main(ns) {
                 let availableThreads = getAvailableThreads();
                 while (availableThreads < threads){
                     currentTime = new Date().getTime();
-                    ns.printf(`${new Date(currentTime).toLocaleTimeString('sv')} - Not enough threads to post(E:${ns.tFormat(endLoopTime-currentTime)})`)
+                    ns.printf(`${new Date(currentTime).toLocaleTimeString('sv')}`);
+                    ns.printf(`Not enough threads to post(E:${ns.tFormat(endLoopTime-currentTime)})`)
                     updateThreads(ns);
                     availableThreads = getAvailableThreads();
                     await ns.sleep(SPACING);
@@ -119,7 +123,7 @@ export async function main(ns) {
                 if (result)
                     endTime = currentTime + weakT + TEN_SECONDS;
                 else
-                    ns.printf(`${ new Date().toLocaleTimeString('sv')} - Not enough threads to post`);
+                    ns.printf(`${ new Date().toLocaleTimeString('sv')} - No threads`);
 
                 await ns.sleep(SPACING);
                 ns.printf(`${"-".repeat(25)}`);
@@ -128,23 +132,29 @@ export async function main(ns) {
         else{    
             let secString = `S:${ns.formatNumber(ns.getServerSecurityLevel(data.name), 2)}/${ns.getServerMinSecurityLevel(data.name)}`;
             let monString = `$: ${ns.formatNumber(ns.getServerMoneyAvailable(data.name),2)}/${ns.formatNumber(ns.getServerMaxMoney(data.name),2)}`;
-            ns.printf(`Not Ready to Hack: ${data.name} - ${secString} | M: ${monString}`);   
+            ns.printf(`Not Ideal State: ${data.name} - ${secString} | M: ${monString}`);   
             endTime = currentTime;
         }
 
         data.state = state.Hacked;
         data.time = endTime;
-        ns.printf(`Writing to Handler: ${data.name} - ${ns.tFormat(data.time - new Date().getTime())}`);
-        ns.printf(`${"-".repeat(50)}`);
+        ns.printf(`Writing to Handler: `);
+        ns.printf(`${data.name}`);
+        ns.printf(`${ns.tFormat(data.time - new Date().getTime())}`);
+        ns.printf(`${"-".repeat(25)}`);
         await writeToPort(ns, _port_list.HANDLER_PORT, data);
     }
 }
 
-function getTailPositions(id){
-    if (id > 5)
-        return 5 * sizeY;
-    
-    return (id-1) * sizeY;
+function calculateTailYPosition(id) {
+    if ((id % 7) - 1 < 0)
+        return ((id - 1) % 7) * 300
+
+    return ((id % 7) - 1) * 300;
+}
+
+function calculateTailXPosition(id) {
+    return Math.floor((id - 1) / 7) * 180;
 }
 
 function targetInIdealState(ns, targetName){
@@ -209,7 +219,7 @@ async function executeThreadsToServers(ns, batchList, target) {
         }
         
         await ns.exec(x[0], x[1], x[2], ...x[3]);
-        ns.printf(`A:${actionString} - T:${paddedThreads} - D:${x[3][1]}`);
+        ns.printf(`A:${actionString} - T:${paddedThreads} - D:${ns.formatNumber(x[3][1],2)}`);
     }
 
     return true;
