@@ -12,7 +12,7 @@ export async function main(ns) {
     spamfilter(ns);
     ns.tail();
     ns.resizeTail(850,200);
-    ns.moveTail(950, 950);
+    ns.moveTail(925, 950);
     ns.atExit(() => {
         ns.closeTail();
     });
