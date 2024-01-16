@@ -32,7 +32,8 @@ export async function main(ns) {
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
     while (true){        
-        getMaxthreads(ns);
+        getThreadsObjects(ns);
+        let maxThreads = getMaxThreads();
         let data = await readFromPort(ns, _port_list.WGW_THREADS);
         if (data == null){
             await ns.sleep(HALF_SECOND);
@@ -46,17 +47,20 @@ export async function main(ns) {
         let player = ns.getPlayer();
         let server = ns.getServer(data.name);
         if (threads > 0){
-            let currentDate = new Date();
-            let timeFormatted = currentDate.toLocaleTimeString(`sv`);
-            ns.printf(timeFormatted);
             let batchList = getBatchList(post);
             let toBePosted = true;
             while (toBePosted){
                 let result = await executeThreadsToServers(ns, batchList, data.name);
-                if (result)
+                if (result === null)
                     toBePosted = false;
-                else
-                    await ns.sleep(10);
+                else{
+                    let remaining = result.reduce((rem, x) => { return rem + x[2]; }, 0);
+                    ns.printf(`Not enough threads to complete post. ${remaining} threads remaining. (Waiting 10 seconds for more threads)`);       
+                    let updatedPost = calculateRemaingPostData(result, post);
+                    batchList = getBatchList(updatedPost);                    
+                    await ns.sleep(TEN_SECONDS);
+                    updateThreads(ns);
+                }
             }
             let weakT = ns.formulas.hacking.weakenTime(server, player);
             currentTime = new Date().getTime();
@@ -107,10 +111,6 @@ async function executeThreadsToServers(ns, batchList, target) {
             });
         }
     }    
-
-    if (threadsUsed !== totalNeeded)
-        return false;
-    
     execBuilder.forEach((x) => {
         if (x[2] === 0)
             return;
@@ -121,7 +121,63 @@ async function executeThreadsToServers(ns, batchList, target) {
         ns.exec(x[0], x[1], x[2], ...x[3]);
     });
 
-    return true;
+    if (threadsUsed !== totalNeeded)
+        return execBuilder;
+
+    return null;
+}
+
+function calculateRemaingPostData(execBuilder, postData){
+    debugger;
+    let execValues = getExecBuilderValues(execBuilder);
+
+    let w1ExecutedItem = findItemByActionTypeAndSecondElement(Action.Weak, postData.W1Delay, execValues);
+    if (w1ExecutedItem === undefined)
+        w1ExecutedItem = { action: Action.Weak, threads: 0 };
+    let gExecutedItem = findItemByActionTypeAndSecondElement(Action.Grow, postData.GDelay, execValues);
+    if (gExecutedItem === undefined)
+        gExecutedItem = { action: Action.Grow, threads: 0 };
+    let w2ExecutedItem = findItemByActionTypeAndSecondElement(Action.Weak, postData.W2Delay, execValues);
+    if (w2ExecutedItem === undefined)
+        w2ExecutedItem = { action: Action.Weak, threads: 0 };
+    let result = {
+        ServerName: postData.ServerName,
+        W1Delay: postData.W1Delay,
+        GDelay: postData.GDelay,
+        W2Delay: postData.W2Delay,
+        W1Threads: postData.W1Threads - w1ExecutedItem.threads,
+        GThreads: postData.GThreads - gExecutedItem.threads,
+        W2Threads: postData.W2Threads - w2ExecutedItem.threads,
+    };
+
+    return result;
+}
+
+function getExecBuilderValues(execBuilderList){
+    const result = [];  
+    for (const item of execBuilderList) {
+        const action = item[0];
+        const delay = item[3][1];
+    
+        const existingResult = result.find((entry) => entry.action === action && entry.delay === delay);
+  
+        if (existingResult) {
+            existingResult.threads += item[2];
+        } else {
+            const newResult = {
+                action,
+                threads: item[2],
+                delay: delay,
+            };
+            result.push(newResult);
+        }
+    }
+
+    return result;
+}
+
+function findItemByActionTypeAndSecondElement(action, delay, resultList) {
+    return resultList.find((item) => item.action === action && item.delay === delay);
 }
 
 function getBatchList(data){
@@ -147,6 +203,11 @@ function getAvailableThreads(){
         return total + server.AvailableThreads; }, 0);
 }
 
+function getMaxThreads(){
+    return serverObjects.reduce((total, server) => {
+        return total + server.MaxThreads; }, 0);
+}
+
 function updateThreads(ns) {
     serverObjects.forEach((x) => {
         x.UsedThreads = calcHomeUsedThreads(ns)
@@ -154,7 +215,7 @@ function updateThreads(ns) {
     });
 }
 
-function getMaxthreads(ns) {
+function getThreadsObjects(ns) {
     serverObjects = [];
     let purchasedServers = ns.getPurchasedServers(ns);   
     let serversAllowed = purchasedServers[purchasedServers.length-1]; //allocate last p.server

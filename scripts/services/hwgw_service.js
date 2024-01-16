@@ -118,7 +118,7 @@ export async function main(ns) {
                 if (result)
                     endTime = currentTime + weakT + TEN_SECONDS;
                 else
-                    ns.printf(`${new Date().toLocaleTimeString('sv')} - Not enough threads to post`)
+                    ns.printf(`${ new Date().toLocaleTimeString('sv')} - Not enough threads to post`);
 
                 await ns.sleep(SPACING);
                 ns.printf(`${"-".repeat(25)}`);
