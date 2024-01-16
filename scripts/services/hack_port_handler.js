@@ -23,7 +23,6 @@ const capState = {
     Mid: 3
 }
 
-const MAX_TARGETS = 15;
 const TENTH_SECOND = 100;
 const HALF_SECOND = 500;
 const ONE_SECOND = 1000;
@@ -35,6 +34,7 @@ const home = "home";
 // #endregion
 // #region Variables
 //General
+let MAX_TARGETS = 15;
 let REFRESH_PERIOD;
 let refreshState;
 let lastRefreshed;
@@ -283,6 +283,7 @@ async function refreshTargets(ns){
     }
 
     ns.printf(`Getting new targets....`);//Fetch target list
+    setTargetMaxLength(ns);
     targetList = await getHackTargetList(ns);
      if (targetList.length > MAX_TARGETS);
         targetList = targetList.slice(0, MAX_TARGETS);
@@ -416,7 +417,7 @@ function updateInstanceRequired(ns){
     else
         capacityCount++;
 
-    if (capacityCount >= 300){
+    if (capacityCount >= 60){
         if (currentState === capState.Low && getInstanceCount(ns) < 20)
             createInstance(ns);
 
@@ -559,6 +560,19 @@ function getInstanceCount(ns){
 }
 //#endregion
 // #region Housekeeping
+function setTargetMaxLength(ns){
+    let playerLevel = ns.getHackingLevel();
+    if (playerLevel > 3000)
+        MAX_TARGETS = 50;
+
+    if (playerLevel < 2000)
+        MAX_TARGETS = 30;
+    
+    if (playerLevel < 1000)
+        MAX_TARGETS = 15;
+
+}
+
 function setRefreshRate(ns){
     let hackLevel = ns.getHackingLevel();
     return getRefreshPeriod(hackLevel);
