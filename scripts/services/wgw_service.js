@@ -63,10 +63,10 @@ export async function main(ns) {
                 if (result === null)
                     toBePosted = false;
                 else{  
-                    let updatedPost = calculateRemaingPostData(result, post);
-                    batchList = getBatchList(updatedPost);
+                    post = calculateRemaingPostData(result, post);
+                    batchList = getBatchList(post);
                     threads = post.W1Threads + post.W2Threads + post.GThreads;
-                    post = updatedPost;
+                    ns.printf(`Remaining: [ W1:${post.W1Threads}, G:${post.GThreads}, W2:${post.W2Threads} ]`)
                     updateThreads(ns);
                     let availableThreads = getAvailableThreads();
                     let minThread = threads*0.2;
@@ -74,15 +74,17 @@ export async function main(ns) {
                         await ns.sleep(ONE_SECOND);
                         updateThreads(ns);
                         availableThreads = getAvailableThreads();
-
+                        
+                        maxThreads = getMaxThreads();
                         if (availableThreads >= maxThreads)
                             break;
-                    }            
+                    }  
                 }
+                ns.printf(`Attempting remaining post...`);
             }
             let weakT = ns.formulas.hacking.weakenTime(server, player);
             currentTime = new Date().getTime();
-            endTime = currentTime + weakT + TEN_SECONDS;
+            endTime = currentTime + weakT;
         }
         else{
             ns.printf(`No prep required: ${data.name}`);

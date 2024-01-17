@@ -85,6 +85,11 @@ export async function main(ns) {
         let wgw = ns.getRunningScript(Services.WGW, home);
         if (wgw)
             ns.kill(wgw.pid);
+
+        let count = getInstanceCount(ns);
+        for (let i = count; i > 1; i--){
+            initiateKill(ns, i);
+        }
     });
 // #endregion
 // #region Required setup - log spam & port handler setup and clearing
@@ -112,14 +117,11 @@ export async function main(ns) {
         await refreshTargets(ns);//Check for new targets
         updateInstanceRequired(ns);//Check if we nees more or less instances
         await ns.sleep(HALF_SECOND);
-        if (historyHandler.peek() !== NULL_MESSAGE){//check for HWGW target data
             while (historyHandler.peek() !== NULL_MESSAGE){      
                 let portRead = historyHandler.read();
-                let data = JSON.parse(portRead);
-                
+                let data = JSON.parse(portRead);                
                 addOrUpdateInstance(ns, data);
                 await ns.sleep(5);
-            }
         }//end of Instance data update handling
 
         if (mainHandler.peek() !== NULL_MESSAGE){//check for active posts
@@ -415,7 +417,7 @@ function updateInstanceRequired(ns){
 
     let currentState = checkCurrentCapacity(ns);
 
-    if (currentState === capState.Mid || currentState !== capacityState){
+    if (currentState !== capacityState){
         capacityCount = 0;
         capacityState = currentState;
     }
@@ -423,11 +425,11 @@ function updateInstanceRequired(ns){
         capacityCount++;
 
     if (capacityCount >= 30){
-        if (currentState === capState.Low && getInstanceCount(ns) < 39)
+        if ((currentState === capState.Low || currentState === capState.Mid) && getInstanceCount(ns) < 39)
             createInstance(ns);
 
         if (currentState === capState.High && getInstanceCount(ns) > 2)
-            addInstanceToKillList(ns);       
+            addInstanceToKillList(ns);    
 
         capacityCount = 0;
         capacityState = capState.Mid;
@@ -469,16 +471,20 @@ function setServerAllocations(ns){
     let hwgwRatio = totalHWGWUsed / totalHWGWMax;
     let wgwRatio = totalWGWUsed / totalWGWMax;
 
-    if (hwgwRatio < 0.5 && wgwRatio < 0.5)
+    if (Math.max(wgwRatio,hwgwRatio) - Math.min(wgwRatio,hwgwRatio) < 0.1)
         return;
     
-    if (hwgwRatio >= wgwRatio)
-        wgwCount--;
-    else
-        wgwCount++;
+    if (hwgwRatio >= wgwRatio){
+        let result = Math.ceil((hwgwRatio/wgwRatio) * hwgwCount);
+        wgwCount = 25-result;
+    }
+    else{
+        let result = Math.ceil((wgwRatio/hwgwRatio) * wgwCount);
+        wgwCount = result;
+    }
 
-    if (wgwCount > 23)
-        wgwCount = 23;
+    if (wgwCount > 24)
+        wgwCount = 24;
 
     if (wgwCount < 1)
         wgwCount = 1;

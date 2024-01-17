@@ -11,7 +11,7 @@ export async function main(ns) {
     disableLogs(ns);
     ns.tail();
     ns.resizeTail(850,200);
-    ns.moveTail(925, 1155);
+    ns.moveTail(690, 1180);
     ns.atExit(() => {
         ns.closeTail();
     });

@@ -131,7 +131,7 @@ export async function main(ns) {
                 let result = await executeThreadsToServers(ns, batchList, data.name);
                 currentTime = new Date().getTime();
                 if (result)
-                    endTime = currentTime + weakT + TEN_SECONDS;
+                    endTime = currentTime + weakT;
                 else
                     ns.printf(`${ new Date().toLocaleTimeString('sv')} - No threads`);
 
