@@ -307,7 +307,7 @@ async function refreshTargets(ns){
             continue;
         }
          
-        await ns.sleep(HALF_SECOND);
+        await ns.sleep(TENTH_SECOND);
         handleTargetListData(ns, target);//Add to active list
     }
 
@@ -322,8 +322,8 @@ async function refreshTargets(ns){
     lastRefreshed = new Date().getTime();
     ns.printf(`Refresh completed (Next: ${ns.tFormat(REFRESH_PERIOD)})`);
     refreshState = rstate.Waiting;
-
     setServerAllocations(ns);
+    await ns.sleep(HALF_SECOND);
 }
 // #endregion
 // #region Script Validations
@@ -420,13 +420,12 @@ function updateInstanceRequired(ns){
     else
         capacityCount++;
 
-    if (capacityCount >= 15){
+    if (capacityCount >= 30){
         if (currentState === capState.Low && getInstanceCount(ns) < 39)
             createInstance(ns);
 
-        if (capacityCount >= 60 && currentState === capState.High && getInstanceCount(ns) > 2)
-            addInstanceToKillList(ns);
-
+        if (currentState === capState.High && getInstanceCount(ns) > 2)
+            addInstanceToKillList(ns);       
 
         capacityCount = 0;
         capacityState = capState.Mid;
@@ -568,7 +567,7 @@ function setTargetMaxLength(ns){
     let playerLevel = ns.getHackingLevel();
     let instanceCount = getInstanceCount(ns);
 
-    if (playerLevel > 3000 && instanceCount > 20)
+    if (playerLevel > 3000 && instanceCount >= 20)
         MAX_TARGETS = Infinity;
 
     if (playerLevel > 3000 && instanceCount < 20)

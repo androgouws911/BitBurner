@@ -363,8 +363,7 @@ const threads_threshold = [
     { threads: 100, value: TEN_SECONDS },
     { threads: 10000, value: ONE_SECOND },
     { threads: 100000, value: HALF_SECOND },
-    { threads: 1000000, value: QUARTER_SECOND },
-    { threads: Infinity, value: TENTH_SECOND },
+    { threads: 1000000, value: QUARTER_SECOND }
 ];
 
 
