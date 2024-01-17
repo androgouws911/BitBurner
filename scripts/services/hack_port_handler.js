@@ -476,10 +476,14 @@ function setServerAllocations(ns){
     
     if (hwgwRatio >= wgwRatio){
         let result = Math.ceil((hwgwRatio/wgwRatio) * hwgwCount);
+        if (result < wgwCount - 3)
+            result = wgwCount - 3
         wgwCount = 25-result;
     }
     else{
         let result = Math.ceil((wgwRatio/hwgwRatio) * wgwCount);
+        if (result > wgwCount + 3)
+            result = wgwCount + 3;
         wgwCount = result;
     }
 
