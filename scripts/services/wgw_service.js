@@ -18,9 +18,11 @@ const home = "home";
 const HALF_SECOND = 500;
 const ONE_SECOND = 1000;
 const TEN_SECONDS = 10000;
+let tailStateTime;
 
 /** @param {NS} ns */
 export async function main(ns) {
+    tailStateTime = new Date().getTime();
     let sizeX = 500;
     let sizeY = 450;
     let posX = 1545;
@@ -34,7 +36,7 @@ export async function main(ns) {
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
     while (true){        
-        handleTailState(ns, sizeX, sizeY, posX, posY);
+        tailStateCheck(ns, sizeX, sizeY, posX, posY);
         fetchThreads(ns);
         let maxThreads = getMaxThreads();
         let data = await readFromPort(ns, _port_list.WGW_THREADS);
@@ -229,6 +231,16 @@ function updateThreads(ns) {
         x.AvailableThreads = x.MaxThreads - x.UsedThreads;
     });
 }
+
+function tailStateCheck(ns, sizeX, sizeY, posX, posY){
+    let currentTime = new Date().getTime();
+    if (currentTime < tailStateTime + ONE_MINUTE)
+        return;
+
+    handleTailState(ns, sizeX, sizeY, posX, posY);
+    tailStateTime = currentTime;
+}
+
 function calcServerUsedThreads(ns, name) {
     let ram = ns.getServerUsedRam(name);
     if (ram === 0) return 0;

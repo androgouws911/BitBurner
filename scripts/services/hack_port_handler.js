@@ -39,6 +39,7 @@ let MAX_TARGETS = 15;
 let REFRESH_PERIOD;
 let refreshState;
 let lastRefreshed;
+let tailStateTime;
 //Target Handling
 let handlerList;
 let targetList;
@@ -72,6 +73,7 @@ export async function main(ns) {
     capacityState = capState.Mid;//Default to Mid prior to normalization
     lastInstanceCheck = new Date().getTime() + ONE_MINUTE;//Wait for 1min to allow for normalization of servers
     lastAllocChange = new Date().getTime();
+    tailStateTime = new Date().getTime();
     setAllocations(ns, 12,25);
 // #endregion
 // #region Tail view setup & exit handling (Kill all 3 services)
@@ -105,7 +107,7 @@ export async function main(ns) {
     await ns.sleep(TENTH_SECOND);
     //Active Loop
     while (true){
-        handleTailState(ns, sizeX, sizeY, posX, posY);
+        tailStateCheck(ns, sizeX, sizeY, posX, posY);
         REFRESH_PERIOD = setRefreshRate(ns);
         await refreshTargets(ns);//Check for new targets
         updateInstanceRequired(ns);//Check if we nees more or less instances
@@ -563,6 +565,15 @@ function getInstanceCount(ns){
 }
 //#endregion
 // #region Housekeeping
+function tailStateCheck(ns, sizeX, sizeY, posX, posY){
+    let currentTime = new Date().getTime();
+    if (currentTime < tailStateTime + ONE_MINUTE)
+        return;
+
+    handleTailState(ns, sizeX, sizeY, posX, posY);
+    tailStateTime = currentTime;
+}
+
 function setTargetMaxLength(ns){
     let playerLevel = ns.getHackingLevel();
     let instanceCount = getInstanceCount(ns);

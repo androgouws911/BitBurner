@@ -27,9 +27,11 @@ let SPACING = TEN_SECONDS;
 let DELAY = 20;
 let instanceCount = 1;
 let instanceID = 0;
+let tailStateTime;
 
 /** @param {NS} ns */
 export async function main(ns) {
+    tailStateTime = new Date().getTime();
     instanceID = ns.args[0];
     if (ns.args[0] === undefined){
         ns.atExit(() => {
@@ -53,7 +55,7 @@ export async function main(ns) {
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
     while (true){
-        handleTailState(ns, sizeX, sizeY, posX, posY);
+        tailStateCheck(ns, sizeX, sizeY, posX, posY);
         fetchThreads(ns);
         let maxThreads = getMaxThreads();
         SPACING = getSpacing(ns);
@@ -267,6 +269,15 @@ function updateThreads(ns) {
         x.UsedThreads = calcServerUsedThreads(ns, x.ServerName);
         x.AvailableThreads = x.MaxThreads - x.UsedThreads;
     });
+}
+
+function tailStateCheck(ns, sizeX, sizeY, posX, posY){
+    let currentTime = new Date().getTime();
+    if (currentTime < tailStateTime + ONE_MINUTE)
+        return;
+
+    handleTailState(ns, sizeX, sizeY, posX, posY);
+    tailStateTime = currentTime;
 }
 
 function fetchThreads(ns) {
