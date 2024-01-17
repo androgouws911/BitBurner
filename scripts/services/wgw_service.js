@@ -18,6 +18,7 @@ const home = "home";
 const HALF_SECOND = 500;
 const ONE_SECOND = 1000;
 const TEN_SECONDS = 10000;
+const ONE_MINUTE = 60000;
 let tailStateTime;
 
 /** @param {NS} ns */
