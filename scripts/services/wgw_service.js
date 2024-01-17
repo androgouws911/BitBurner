@@ -37,7 +37,7 @@ export async function main(ns) {
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
     while (true){        
-        tailStateCheck(ns, sizeX, sizeY, posX, posY);
+        handleTailState(ns, sizeX, sizeY, posX, posY);
         fetchThreads(ns);
         let maxThreads = getMaxThreads();
         let data = await readFromPort(ns, _port_list.WGW_THREADS);
@@ -231,15 +231,6 @@ function updateThreads(ns) {
         x.UsedThreads = calcServerUsedThreads(ns, x.ServerName);
         x.AvailableThreads = x.MaxThreads - x.UsedThreads;
     });
-}
-
-function tailStateCheck(ns, sizeX, sizeY, posX, posY){
-    let currentTime = new Date().getTime();
-    if (currentTime < tailStateTime + ONE_MINUTE)
-        return;
-
-    handleTailState(ns, sizeX, sizeY, posX, posY);
-    tailStateTime = currentTime;
 }
 
 function calcServerUsedThreads(ns, name) {

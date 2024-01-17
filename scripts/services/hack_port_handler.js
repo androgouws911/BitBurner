@@ -29,7 +29,6 @@ const HALF_SECOND = 500;
 const ONE_SECOND = 1000;
 const HALF_MINUTE = 30000;
 const ONE_MINUTE = 60000;
-const TEN_MINUTES = 600000;
 const NULL_MESSAGE = "NULL PORT DATA";
 const home = "home";
 // #endregion
@@ -107,7 +106,7 @@ export async function main(ns) {
     await ns.sleep(TENTH_SECOND);
     //Active Loop
     while (true){
-        tailStateCheck(ns, sizeX, sizeY, posX, posY);
+        handleTailState(ns, sizeX, sizeY, posX, posY);
         REFRESH_PERIOD = setRefreshRate(ns);
         await refreshTargets(ns);//Check for new targets
         updateInstanceRequired(ns);//Check if we nees more or less instances
@@ -490,6 +489,7 @@ function setServerAllocations(ns){
 // #endregion
 // #region Instance Creation / Update / Removal
 function createInstance(ns){
+    ns.printf(`Instance Create requested`);
     let count = getInstanceCount(ns);
     let instanceDetails = { id: count+1, target: "" };
     let index = -1;
@@ -498,12 +498,15 @@ function createInstance(ns){
 
     if (index === -1)
         historyList.push(instanceDetails);
-
+    
+    ns.printf(`IC index not -1 - try create ${count+1}`);
+    
     if (!ns.isRunning(Services.HWGW, home, ...[count+1]))
         ns.exec(Services.HWGW, home, 1, ...[count+1]);
 }
 
 function addOrUpdateInstance(data){
+    ns.printf(`${data.id} data update to ${data.target}`);
     let index = -1;
     if (historyList.length > 0)
         index = historyList.findIndex(item => item.id === data.id);
@@ -516,11 +519,13 @@ function addOrUpdateInstance(data){
 
 function addInstanceToKillList(ns){
     let count = getInstanceCount(ns);
+    ns.printf(`Adding ${count} to kill list`);
     if (!toBeKilled.includes(count))
         toBeKilled.push(count);
 }
 
 function killRequiredInstance(ns, targetName){
+    ns.printf(`Check if kill required ${targetName}`);
     let index = -1;
     if (historyList.length > 0)
         index = historyList.findIndex(item => item.target === targetName);
@@ -545,6 +550,7 @@ function killRequiredInstance(ns, targetName){
 }
 
 function initiateKill(ns, id){
+    ns.printf(`Killing script: ${id}`);
     if (ns.isRunning(Services.HWGW, home, ...[id])){
         let script = ns.getRunningScript(Services.HWGW, home, ...[id]);
         if (script !== undefined && script.pid !== 0)
@@ -565,15 +571,6 @@ function getInstanceCount(ns){
 }
 //#endregion
 // #region Housekeeping
-function tailStateCheck(ns, sizeX, sizeY, posX, posY){
-    let currentTime = new Date().getTime();
-    if (currentTime < tailStateTime + ONE_MINUTE)
-        return;
-
-    handleTailState(ns, sizeX, sizeY, posX, posY);
-    tailStateTime = currentTime;
-}
-
 function setTargetMaxLength(ns){
     let playerLevel = ns.getHackingLevel();
     let instanceCount = getInstanceCount(ns);
