@@ -33,7 +33,8 @@ export const Data = {
     Dynamic: "scripts/data/dynamic_server_data.txt",
     Static: "scripts/data/static_server_data.txt",
     FileList: 'scripts/data/file_list_model.js',
-    ShouldKill: 'scripts/data/kill_hwgw.txt'
+    ShouldKill: 'scripts/data/kill_hwgw.txt',
+    TailState: 'scripts/data/tail_state.txt'
 };
 
 // actions.js

@@ -5,6 +5,7 @@ import { ThreadServer } from 'scripts/models/thread_models.js';
 import { _port_list } from 'scripts/enums/ports.js';
 import { Action, Services } from 'scripts/data/file_list.js';
 import { getWGWAllocation } from 'scripts/helpers/hwgw_wgw_server_alloc_helper';
+import { handleTailState } from 'scripts/helpers/tail_helper';
 
 const state = {
     Ready : 1,
@@ -17,13 +18,13 @@ const home = "home";
 const HALF_SECOND = 500;
 const ONE_SECOND = 1000;
 const TEN_SECONDS = 10000;
-const ONE_MINUTE = 60000;
 
 /** @param {NS} ns */
 export async function main(ns) {
-    ns.tail();
-    ns.resizeTail(625,720);
-    ns.moveTail(665,0);
+    let sizeX = 500;
+    let sizeY = 450;
+    let posX = 1545;
+    let posY = 930;
     ns.atExit(() => {
         ns.closeTail();
         let hwgw = ns.getRunningScript(Services.HWGW, home);
@@ -33,6 +34,7 @@ export async function main(ns) {
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
     while (true){        
+        handleTailState(ns, sizeX, sizeY, posX, posY);
         fetchThreads(ns);
         let maxThreads = getMaxThreads();
         let data = await readFromPort(ns, _port_list.WGW_THREADS);
@@ -49,7 +51,7 @@ export async function main(ns) {
         let server = ns.getServer(data.name);
         if (threads > 0){
             ns.printf(`Mending ${data.name}`);
-            ns.printf(`Total Threads: [W1:${post.W1Threads}, G:${post.GThreads}, W2: ${post.W2Threads}]`)
+            ns.printf(`Total Threads: [ W1:${post.W1Threads}, G:${post.GThreads}, W2:${post.W2Threads} ]`)
             let batchList = getBatchList(post);
             let toBePosted = true;
             while (toBePosted){
@@ -83,8 +85,9 @@ export async function main(ns) {
             endTime = currentTime;
         }
         data.state = state.Prepped;
-        data.time = endTime;
-        ns.printf(`Writing to Handler: ${data.name} - ${ns.tFormat(data.time - new Date().getTime())}`);
+        data.time = endTime + ONE_SECOND;
+        ns.printf(`Writing to Handler: ${data.name}`);
+        ns.printf(`Wait Time: ${ns.tFormat(data.time - new Date().getTime())}`);
         ns.printf(`${"-".repeat(50)}`);
         await writeToPort(ns, _port_list.HANDLER_PORT, data);
     }
@@ -129,7 +132,7 @@ async function executeThreadsToServers(ns, batchList, target) {
         
         let actionString = `${x[0].slice(x[0].length-7, x[0].length-3)}`;
         let paddedThreads = `${x[2]}`.padEnd(5, " ");
-        ns.printf(`A:${actionString} - T:${paddedThreads} - D:${x[3][1]}`);
+        ns.printf(`A:${actionString} - T:${paddedThreads} D:${ns.formatNumber(x[3][1], 2)}`);
         ns.exec(x[0], x[1], x[2], ...x[3]);
     });
 

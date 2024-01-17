@@ -3,6 +3,7 @@ import { writeToPort } from 'scripts/handler/port_handler.js';
 import { Action, Services } from 'scripts/data/file_list.js';
 import { _port_list } from 'scripts/enums/ports.js';
 import { getHWGWAllocation, getWGWAllocation, setAllocations } from 'scripts/helpers/hwgw_wgw_server_alloc_helper';
+import { handleTailState } from 'scripts/helpers/tail_helper';
 
 //#region Constants
 const state = {
@@ -74,9 +75,10 @@ export async function main(ns) {
     setAllocations(ns, 12,25);
 // #endregion
 // #region Tail view setup & exit handling (Kill all 3 services)
-    ns.tail();
-    ns.resizeTail(450,720);
-    ns.moveTail(1295, 0);
+    let sizeX = 500;
+    let sizeY = 450;
+    let posX = 2050;
+    let posY = 930;
     ns.atExit(() => {
         ns.closeTail();
         let wgw = ns.getRunningScript(Services.WGW, home);
@@ -103,6 +105,7 @@ export async function main(ns) {
     await ns.sleep(TENTH_SECOND);
     //Active Loop
     while (true){
+        handleTailState(ns, sizeX, sizeY, posX, posY);
         REFRESH_PERIOD = setRefreshRate(ns);
         await refreshTargets(ns);//Check for new targets
         updateInstanceRequired(ns);//Check if we nees more or less instances
@@ -417,11 +420,11 @@ function updateInstanceRequired(ns){
     else
         capacityCount++;
 
-    if (capacityCount >= 60){
-        if (currentState === capState.Low && getInstanceCount(ns) < 20)
+    if (capacityCount >= 15){
+        if (currentState === capState.Low && getInstanceCount(ns) < 39)
             createInstance(ns);
 
-        if (currentState === capState.High && getInstanceCount(ns) > 1)
+        if (capacityCount >= 60 && currentState === capState.High && getInstanceCount(ns) > 2)
             addInstanceToKillList(ns);
 
 
@@ -524,10 +527,11 @@ function killRequiredInstance(ns, targetName){
     if (index === -1)
         return;
 
+    let serverDetails = historyList[index];
+    
     if (serverDetails.id === 1)
         return;
 
-    let serverDetails = historyList[index];
     if (toBeKilled.includes(serverDetails.id))
         initiateKill(ns, serverDetails.id);
 
@@ -562,7 +566,12 @@ function getInstanceCount(ns){
 // #region Housekeeping
 function setTargetMaxLength(ns){
     let playerLevel = ns.getHackingLevel();
-    if (playerLevel > 3000)
+    let instanceCount = getInstanceCount(ns);
+
+    if (playerLevel > 3000 && instanceCount > 20)
+        MAX_TARGETS = Infinity;
+
+    if (playerLevel > 3000 && instanceCount < 20)
         MAX_TARGETS = 50;
 
     if (playerLevel < 2000)

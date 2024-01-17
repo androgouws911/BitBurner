@@ -5,6 +5,7 @@ import { ThreadServer } from 'scripts/models/thread_models.js';
 import { _port_list } from 'scripts/enums/ports.js';
 import { Action, Services } from 'scripts/data/file_list.js';
 import { getHWGWAllocation } from 'scripts/helpers/hwgw_wgw_server_alloc_helper';
+import { handleTailState } from 'scripts/helpers/tail_helper';
 
 const state = {
     Ready : 1,
@@ -45,15 +46,17 @@ export async function main(ns) {
         });
     }
 
-    ns.tail();
-    ns.resizeTail(300, 180);
-    ns.moveTail(calculateTailXPosition(instanceID),calculateTailYPosition(instanceID));
+    let sizeX = 300;
+    let sizeY = 180;
+    let posX = calculateTailXPosition(instanceID);
+    let posY = calculateTailYPosition(instanceID);
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
     while (true){
+        handleTailState(ns, sizeX, sizeY, posX, posY);
         fetchThreads(ns);
         let maxThreads = getMaxThreads();
-        SPACING = getSpacing(maxThreads);
+        SPACING = getSpacing(ns);
     
         let data = await readFromPort(ns, _port_list.HWGW_THREADS);
         if (data == null){
@@ -92,9 +95,10 @@ export async function main(ns) {
             serverObjString = serverObjString.trimEnd();
             ns.printf(`AllocServers: ${serverObjString}`);
             ns.printf(`${"-".repeat(25)}`);
-            ns.printf(`${timeFormatted} - Hacking ${data.name}`);
+            ns.printf(`${timeFormatted}`);
+            ns.printf(`Hacking ${data.name}`);
             while (currentTime <= endLoopTime){
-                currentTime = new Date().getTime();
+                currentTime = new Date().getTime();                
                 if (!targetInIdealState(ns, data.name)){
                     await ns.sleep(1);
                     continue;
@@ -104,7 +108,8 @@ export async function main(ns) {
                 while (availableThreads < threads){
                     currentTime = new Date().getTime();
                     ns.printf(`${new Date(currentTime).toLocaleTimeString('sv')}`);
-                    ns.printf(`Not enough threads to post(E:${ns.tFormat(endLoopTime-currentTime)})`)
+                    ns.printf(`Not enough threads to post`);
+                    ns.printf(`(E:${ns.tFormat(endLoopTime-currentTime)})`);
                     updateThreads(ns);
                     availableThreads = getAvailableThreads();
                     await ns.sleep(SPACING);
@@ -117,7 +122,8 @@ export async function main(ns) {
                         break;
                 
                 let batchList = getBatchList(post);
-                ns.printf(`Hacking ${data.name}: ${ns.tFormat(endLoopTime - currentTime)}`);
+                ns.printf(`Hacking ${data.name}: `);
+                ns.printf(`${ns.tFormat(endLoopTime - currentTime)}`);
                 let result = await executeThreadsToServers(ns, batchList, data.name);
                 currentTime = new Date().getTime();
                 if (result)
@@ -146,15 +152,15 @@ export async function main(ns) {
     }
 }
 
-function calculateTailYPosition(id) {
+function calculateTailXPosition(id) {
     if ((id % 7) - 1 < 0)
-        return ((id - 1) % 7) * 300
+        return 250 + (((id - 1) % 7) * 305);
 
-    return ((id % 7) - 1) * 300;
+    return 250 + (((id % 7) - 1) * 305);
 }
 
-function calculateTailXPosition(id) {
-    return Math.floor((id - 1) / 7) * 180;
+function calculateTailYPosition(id) {
+    return (Math.floor((id - 1) / 7) * 185);
 }
 
 function targetInIdealState(ns, targetName){
@@ -219,7 +225,7 @@ async function executeThreadsToServers(ns, batchList, target) {
         }
         
         await ns.exec(x[0], x[1], x[2], ...x[3]);
-        ns.printf(`A:${actionString} - T:${paddedThreads} - D:${ns.formatNumber(x[3][1],2)}`);
+        ns.printf(`A:${actionString} - T:${paddedThreads} D:${ns.formatNumber(x[3][1],2)}`);
     }
 
     return true;
@@ -272,12 +278,16 @@ function fetchThreads(ns) {
     if (instanceCount === 1)
         serversAllowed = allocate;
     else{
-        let allocateableServers = allocate;
-        let totalServers = allocateableServers.length;
+        let totalServers = allocate.length;
         let serversPerInstance = Math.floor(totalServers / instanceCount);
         let extraServers = totalServers % instanceCount;
+
+        if (instanceID > totalServers)
+            instanceID = instanceID % totalServers === 0 ? totalServers : instanceID % totalServers;
+
         let startIdx = (instanceID - 1) * serversPerInstance;
         let endIdx = startIdx + serversPerInstance;
+    
         if (extraServers > 0)
         {
             if (instanceID <= extraServers) {
@@ -289,7 +299,8 @@ function fetchThreads(ns) {
                 endIdx += extraServers;
             }
         }
-        serversAllowed = allocateableServers.slice(startIdx, endIdx);
+
+        serversAllowed = allocate.slice(startIdx, endIdx);
     }    
 
     serversAllowed.forEach((x) => {
@@ -336,7 +347,9 @@ async function postToHistoryPort(ns, targetName){
     await ns.sleep(FIVE_SECONDS);
 }
 
-function getSpacing(maxThreads) {
+function getSpacing(ns) {
+    let pServers = ns.getPurchasedServers();
+    let maxThreads = pServers.reduce((total, server) =>{ return total + ns.getServerMaxRam(server);});
     for (const threshold of threads_threshold) {
         if (maxThreads < threshold.threads) {
             return threshold.value;
