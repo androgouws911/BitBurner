@@ -23,15 +23,15 @@ export function cTail(ns){
     ns.closeTail();
 }
 
-export function handleTailState(ns, sizeX, sizeY, posX, posY){
-    let currentTime = new Date().getTime();
-    if (currentTime < lastWrite + 60000){
-        if (currentState)
+export function handleTailState(ns, sizeX, sizeY, posX, posY, script){
+    let scriptTailProps = script.tailProperties;
+
+    if (currentState){
+        if (scriptTailProps === null)
             oTail(ns, sizeX, sizeY, posX, posY);
-        else
+    }
+    else {
+        if (scriptTailProps !== null)
             cTail(ns);
     }
-
-    // let tailState = readDataFromFile(Data.TailState, ns)[0];
-
 }

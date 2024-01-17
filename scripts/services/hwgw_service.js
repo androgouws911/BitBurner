@@ -54,7 +54,8 @@ export async function main(ns) {
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
     while (true){
-        handleTailState(ns, sizeX, sizeY, posX, posY);
+        let thisScript = ns.getRunningScript();
+        handleTailState(ns, sizeX, sizeY, posX, posY, thisScript);
         fetchThreads(ns);
         let maxThreads = getMaxThreads();
         SPACING = getSpacing(ns);
@@ -107,6 +108,8 @@ export async function main(ns) {
                 updateThreads(ns);
                 let availableThreads = getAvailableThreads();
                 while (availableThreads < threads){
+                    let thisScript = ns.getRunningScript();
+                    handleTailState(ns, sizeX, sizeY, posX, posY, thisScript);
                     currentTime = new Date().getTime();
                     ns.printf(`${new Date(currentTime).toLocaleTimeString('sv')}`);
                     ns.printf(`Not enough threads to post`);

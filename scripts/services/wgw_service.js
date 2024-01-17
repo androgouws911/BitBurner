@@ -37,7 +37,8 @@ export async function main(ns) {
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
     while (true){        
-        handleTailState(ns, sizeX, sizeY, posX, posY);
+        let thisScript = ns.getRunningScript();
+        handleTailState(ns, sizeX, sizeY, posX, posY, thisScript);
         fetchThreads(ns);
         let maxThreads = getMaxThreads();
         let data = await readFromPort(ns, _port_list.WGW_THREADS);

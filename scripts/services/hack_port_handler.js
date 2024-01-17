@@ -99,14 +99,15 @@ export async function main(ns) {
     mainHandler.clear();
     historyHandler.clear();
     
-    addOrUpdateInstance({id: 1, target: ""});//add default HWGW instance
+    addOrUpdateInstance(ns, {id: 1, target: ""});//add default HWGW instance
 // #endregion
     ns.printf(`Handler Initialized`);
     await writeToPort(ns, _port_list.MAIN_SERVICE_PORT, true);
     await ns.sleep(TENTH_SECOND);
     //Active Loop
     while (true){
-        handleTailState(ns, sizeX, sizeY, posX, posY);
+        let thisScript = ns.getRunningScript();
+        handleTailState(ns, sizeX, sizeY, posX, posY, thisScript);
         REFRESH_PERIOD = setRefreshRate(ns);
         await refreshTargets(ns);//Check for new targets
         updateInstanceRequired(ns);//Check if we nees more or less instances
@@ -116,7 +117,7 @@ export async function main(ns) {
                 let portRead = historyHandler.read();
                 let data = JSON.parse(portRead);
                 
-                addOrUpdateInstance(data);
+                addOrUpdateInstance(ns, data);
                 await ns.sleep(5);
             }
         }//end of Instance data update handling
@@ -505,7 +506,7 @@ function createInstance(ns){
         ns.exec(Services.HWGW, home, 1, ...[count+1]);
 }
 
-function addOrUpdateInstance(data){
+function addOrUpdateInstance(ns, data){
     ns.printf(`${data.id} data update to ${data.target}`);
     let index = -1;
     if (historyList.length > 0)
