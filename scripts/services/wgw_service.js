@@ -1,5 +1,5 @@
 import { writeToPort, readFromPort } from 'scripts/handler/port_handler.js';
-import { getWGWPostData } from 'scripts/helpers/thread_calc_helper.js';
+import { getWGWPostData, getWGWPostData_Mock } from 'scripts/helpers/thread_calc_helper.js';
 import { SCRIPT_RAM } from 'scripts/handler/general_handler.js';
 import { ThreadServer } from 'scripts/models/thread_models.js';
 import { _port_list } from 'scripts/enums/ports.js';
@@ -18,7 +18,7 @@ const home = "home";
 const HALF_SECOND = 500;
 const ONE_SECOND = 1000;
 const TEN_SECONDS = 10000;
-const ONE_MINUTE = 60000;
+const actionList = [ Action.Hack, Action.Grow, Action.Weak];
 let tailStateTime;
 
 /** @param {NS} ns */
@@ -51,9 +51,18 @@ export async function main(ns) {
         let currentTime = new Date().getTime();
         let post = await getWGWPostData(ns, data.name, 1);
         let threads = post.W1Threads + post.W2Threads + post.GThreads;
+        let homeAvail = serverObjects.filter((x) => x.ServerName === home).AvailableThreads;
         let player = ns.getPlayer();
         let server = ns.getServer(data.name);
+
+        if (homeAvail > threads){
+            let homeServer = ns.getServer(home);
+            post = await getWGWPostData_Mock(ns, server, player, homeServer.cpuCores);
+            threads = post.W1Threads + post.W2Threads + post.GThreads;
+        }
+
         if (threads > 0){
+            ns.printf(`${"-".repeat(50)}`);
             ns.printf(`Mending ${data.name}`);
             ns.printf(`Total Threads: [ W1:${post.W1Threads}, G:${post.GThreads}, W2:${post.W2Threads} ]`)
             let batchList = getBatchList(post);
@@ -94,7 +103,6 @@ export async function main(ns) {
         data.time = endTime + ONE_SECOND;
         ns.printf(`Writing to Handler: ${data.name}`);
         ns.printf(`Wait Time: ${ns.tFormat(data.time - new Date().getTime())}`);
-        ns.printf(`${"-".repeat(50)}`);
         await writeToPort(ns, _port_list.HANDLER_PORT, data);
     }
 }
@@ -110,7 +118,6 @@ async function executeThreadsToServers(ns, batchList, target) {
         let action = batch[0];
         let delay = batch[2];
         let counter = 0;
-        serverObjects.sort((a, b) => b.ServerName - a.ServerName);
         while (counter < threadsNeeded) {
             if (currentLeft === 0 || getAvailableThreads() <= 0)
                 break;
@@ -231,9 +238,23 @@ function getMaxThreads(){
 function updateThreads(ns) {
     fetchThreads(ns);
     serverObjects.forEach((x) => {
-        x.UsedThreads = calcServerUsedThreads(ns, x.ServerName);
+        if (x.ServerName === home)
+            x.UsedThreads = calcHomeUsedThreads(ns);
+        else
+            x.UsedThreads = calcServerUsedThreads(ns, x.ServerName);
+
         x.AvailableThreads = x.MaxThreads - x.UsedThreads;
     });
+}
+
+function calcHomeUsedThreads(ns){
+    let used = ns.getServerUsedRam(home);
+    let reserve = getHomeReservedRam(ns);
+
+    let ram = used - reserve;
+    if (ram === 0) return 0;
+
+    return Math.ceil(ram / SCRIPT_RAM);
 }
 
 function calcServerUsedThreads(ns, name) {
@@ -245,12 +266,35 @@ function calcServerUsedThreads(ns, name) {
 
 function fetchThreads(ns) {
     serverObjects = [];
+    let homeRam = (ns.getServerMaxRam(home) - getHomeReservedRam(ns)) * 0.8;
+    let homeThreads = Math.floor(homeRam / SCRIPT_RAM);
+    serverObjects.push(new ThreadServer(home, new ThreadServer(home, homeThreads)));
+
+    let tempObjects = [];
     let allocate = getWGWAllocation(ns);
     allocate.forEach((x) => {
         let maxRam = ns.getServerMaxRam(x);
         let maxThreads = Math.floor(maxRam / SCRIPT_RAM);
-        serverObjects.push(new ThreadServer(x, maxThreads, 0));
+        tempObjects.push(new ThreadServer(x, maxThreads, 0));
     });
+
+    tempObjects.sort((a, b) => b.ServerName - a.ServerName);
+    tempObjects.forEach((x) => serverObjects.push(x));
+}
+
+function getHomeReservedRam(ns){
+    let list = ns.ps(home);
+    if (list === undefined || list.length < 1)
+        return 0;
+
+    let scriptReserve = list.reduce((total, script) => { 
+        if (actionList.includes(script.filename))
+            return 0;
+
+        return total + ns.getScriptRam(script.filename); 
+    }, 0);
+
+    return scriptReserve;
 }
 
 function getRandomNumber() {

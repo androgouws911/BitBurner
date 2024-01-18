@@ -3,7 +3,7 @@ import { writeToPort } from 'scripts/handler/port_handler.js';
 import { Action, Services } from 'scripts/data/file_list.js';
 import { _port_list } from 'scripts/enums/ports.js';
 import { getHWGWAllocation, getWGWAllocation, setAllocations } from 'scripts/helpers/hwgw_wgw_server_alloc_helper';
-import { handleTailState } from 'scripts/helpers/tail_helper';
+import { handleTailState } from 'scripts/helpers/tail_helper.js';
 
 //#region Constants
 const state = {
@@ -164,12 +164,14 @@ export async function main(ns) {
         handleItem = deactivateLowTargets(ns, handleItem);//Check if post should be active
         if (handleItem === null || handleItem === undefined || !handleItem)//If no longer active
             continue;
-        
+
         //Active and Ready to be processed
         if (handleItem.state === state.Prepped){//Ready to hack - Send to HWGW
-            let scriptList = getActiveHomeScripts(ns);
+            let scriptList = getActiveServerScripts(ns);
+            let homeScriptList = getActiveHomeScripts(ns);
             let result = hasActiveScripts(handleItem.name, scriptList);
-            if (result){
+            let homeResult = hasActiveScripts(handleItem.name, homeScriptList);
+            if (result || homeResult){
                 updateItemTime(handleItem, new Date().getTime() + ONE_MINUTE);                
                 ns.printf(`Scripts active: ${handleItem.name} - wait 1min`);
                 continue;
@@ -187,8 +189,10 @@ export async function main(ns) {
 
         if (handleItem.state === state.Hacked){//Ready to prep - Send to WGW
             let scriptList = getActiveServerScripts(ns);
+            let homeScriptList = getActiveHomeScripts(ns);
             let result = hasActiveScripts(handleItem.name, scriptList);
-            if (result){
+            let homeResult = hasActiveScripts(handleItem.name, homeScriptList);
+            if (result || homeResult){
                 updateItemTime(handleItem, new Date().getTime() + ONE_MINUTE);            
                 ns.printf(`Scripts active: ${handleItem.name} - wait 1min`);
                 continue;
@@ -292,6 +296,14 @@ async function refreshTargets(ns){
     ns.printf(`Getting new targets....`);//Fetch target list
     setTargetMaxLength(ns);
     targetList = await getHackTargetList(ns);
+    if (targetList.length > 1)//remove best candidate for HomeScriptUse
+        targetList = targetList.slice(1);
+
+    let tempHomeScripts = getActiveHomeScripts(ns);
+    targetList.filter((x) => {
+        return !hasActiveScripts(x.name, tempHomeScripts);
+    });
+
      if (targetList.length > MAX_TARGETS);
         targetList = targetList.slice(0, MAX_TARGETS);
     
@@ -490,8 +502,8 @@ function setServerAllocations(ns){
     if (wgwCount > 24)
         wgwCount = 24;
 
-    if (wgwCount < 1)
-        wgwCount = 1;
+    if (wgwCount < 0)
+        wgwCount = 0;
     
     setAllocations(ns, wgwCount, 25);
     lastAllocChange = new Date().getTime();

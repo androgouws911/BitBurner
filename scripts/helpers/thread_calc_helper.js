@@ -31,7 +31,7 @@ export function getWGWPostData(ns, serverName, cores){
 export function getWGWPostData_Mock(ns, server, player, cores){
     let wgwThreads = getMockWGWThreads(ns, server, cores);
     let wgwTiming = wgwMockTimings(ns, server, player);
-    let postData = wgwPostData(wgwTiming, wgwThreads, serverName);
+    let postData = wgwPostData(wgwTiming, wgwThreads, server.hostname);
 
     return postData;
 }

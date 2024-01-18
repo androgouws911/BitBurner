@@ -25,8 +25,9 @@ export function setAllocations(ns, wgwCount, serverCount){
     if (result > 0.96)
         result = 0.96;
 
-    if (result < 0.04)
-        result = 0.04;
+    if (result < 0)
+        result = 0;
+    
     WGW_RESERVED = result;
 }
 
