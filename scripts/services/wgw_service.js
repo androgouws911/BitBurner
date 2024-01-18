@@ -143,9 +143,10 @@ async function executeThreadsToServers(ns, batchList, target) {
         if (x[2] === 0)
             return;
         
+        let serverString = `${x[1]}`;
         let actionString = `${x[0].slice(x[0].length-7, x[0].length-3)}`;
         let paddedThreads = `${x[2]}`.padEnd(5, " ");
-        ns.printf(`A:${actionString} - T:${paddedThreads} D:${ns.formatNumber(x[3][1], 2)}`);
+        ns.printf(`${serverString} A:${actionString} T:${paddedThreads} D:${ns.formatNumber(x[3][1], 2)}`);
         ns.exec(x[0], x[1], x[2], ...x[3]);
     });
 

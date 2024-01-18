@@ -24,7 +24,9 @@ export const Handler = {
     ContractSolver: "scripts/handler/contract_solver.js",
     ContractPortHandler: "scripts/handler/contract_port.js",
     ContractAnswer: "scripts/handler/submit_answer.js",
-    General: "scripts/handler/general_handler.js"
+    General: "scripts/handler/general_handler.js",
+    FactionJoiner: "scripts/handler/faction_joiner.js",
+    AutoBackDoor: "scripts/handler/auto_backdoor.js"
 };
 
 // data.js

@@ -221,6 +221,7 @@ async function executeThreadsToServers(ns, batchList, target) {
         return false;
 
     for (let x of execBuilder){
+        let serverString = `S:${x[1].slice(9)}`;
         let actionString = `${x[0].slice(x[0].length-7, x[0].length-3)}`;
         let paddedThreads = `${x[2]}`.padEnd(5, " ");
         while(!targetInIdealState(ns, target)){
@@ -229,7 +230,7 @@ async function executeThreadsToServers(ns, batchList, target) {
         }
         
         await ns.exec(x[0], x[1], x[2], ...x[3]);
-        ns.printf(`A:${actionString} - T:${paddedThreads} D:${ns.formatNumber(x[3][1],2)}`);
+        ns.printf(`${serverString} A:${actionString} T:${paddedThreads} D:${ns.formatNumber(x[3][1], 2)}`);
     }
 
     return true;

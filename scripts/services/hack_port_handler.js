@@ -86,8 +86,7 @@ export async function main(ns) {
         if (wgw)
             ns.kill(wgw.pid);
 
-        let count = getInstanceCount(ns);
-        for (let i = count; i > 1; i--){
+        for (let i = 39; i > 1; i--){
             initiateKill(ns, i);
         }
     });
@@ -437,11 +436,14 @@ function updateInstanceRequired(ns){
         capacityCount++;
 
     if (capacityCount >= 30){
+        let playerLevel = ns.getHackingLevel();
         if ((currentState === capState.Low || currentState === capState.Mid) && getInstanceCount(ns) < 39)
             createInstance(ns);
 
-        if (currentState === capState.High && getInstanceCount(ns) > 2)
-            addInstanceToKillList(ns);    
+        if (currentState === capState.High && getInstanceCount(ns) > 2){
+            if (playerLevel < 2500 || getInstanceCount(ns) > 7)
+                addInstanceToKillList(ns);    
+        }
 
         capacityCount = 0;
         capacityState = capState.Mid;
@@ -480,6 +482,10 @@ function setServerAllocations(ns){
     let totalHWGWMax = hwgwAlloc.reduce((total, server) => { return total + ns.getServerMaxRam(server); }, 0);
     let totalWGWUsed = wgwAlloc.reduce((total, server) => { return total + ns.getServerUsedRam(server); }, 0);
     let totalWGWMax = wgwAlloc.reduce((total, server) => { return total + ns.getServerMaxRam(server); }, 0);
+    totalHWGWUsed = isNaN(totalHWGWUsed) ? 0 : totalHWGWUsed;
+    totalHWGWMax = isNaN(totalHWGWMax) ? 0 : totalHWGWMax;
+    totalWGWUsed = isNaN(totalWGWUsed) ? 0 : totalWGWUsed;
+    totalWGWMax = isNaN(totalWGWMax) ? 0 : totalWGWMax;
     let hwgwRatio = totalHWGWUsed / totalHWGWMax;
     let wgwRatio = totalWGWUsed / totalWGWMax;
 
@@ -597,6 +603,11 @@ function getInstanceCount(ns){
 function setTargetMaxLength(ns){
     let playerLevel = ns.getHackingLevel();
     let instanceCount = getInstanceCount(ns);
+    if (playerLevel > 2500 && instanceCount < 7){
+        for (let i=7-instanceCount; i<7; i++){
+            createInstance(ns);
+        }
+    }
 
     if (playerLevel > 3000 && instanceCount >= 20)
         MAX_TARGETS = Infinity;
