@@ -53,6 +53,7 @@ export async function main(ns) {
     let posY = calculateTailYPosition(instanceID);
     disableLogs(ns);
     await ns.sleep(TEN_SECONDS);
+    await ns.sleep(getRandomNumber(100,1000));
     while (true){
         let thisScript = ns.getRunningScript();
         handleTailState(ns, sizeX, sizeY, posX, posY, thisScript);
@@ -337,9 +338,7 @@ function calcServerUsedThreads(ns, name) {
     return Math.ceil(ram / SCRIPT_RAM);
 }
 
-function getRandomNumber() {
-    let min = 1;
-    let max = 150;
+function getRandomNumber(min=1, max=150) {
     let randomDecimal = Math.random();
     let randomNumber = min + randomDecimal * (max - min + 1);
     return Math.floor(randomNumber);
@@ -370,8 +369,6 @@ const threads_threshold = [
     { threads: 100000, value: HALF_SECOND },
     { threads: 1000000, value: QUARTER_SECOND }
 ];
-
-
 
 function disableLogs(ns){
     ns.disableLog("disableLog");
