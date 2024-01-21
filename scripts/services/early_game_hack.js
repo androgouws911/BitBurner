@@ -38,29 +38,30 @@ async function prepServers(ns, serverList){
             continue;
         
         let maxMoney = ns.getServerMaxMoney(server);
-        if (!maxMoney  || maxMoney < 1)
+        if ((!maxMoney  || maxMoney < 1) && !isHomeServers(ns, server))
             continue;
 
         let rooted = await attemptOpenRoot(ns, server);
-        if (!rooted)
+        if (!rooted && !isHomeServers(ns, server))
             continue;
 
-        if (!ns.fileExists(Action.EarlyHack, server))         
+        if (!ns.fileExists(Action.EarlyHack, server) && !isHomeServers(ns, server)){
             ns.printf(`Hack script copied to ${server}`);
-        
-        ns.scp(Action.EarlyHack, server, home);
+            ns.scp(Action.EarlyHack, server, home);
+        }
 
         await ns.sleep(ONE_SECOND);
-
+        
         let maxThreads = Math.floor(ns.getServerMaxRam(server) / hackRam);
-        let purchasedServers = ns.getPurchasedServers();
-        if (server === home || purchasedServers.includes(server)){
-            if (playerLevel < 5)
+        if (isHomeServers(ns, server)){
+            if (playerLevel < 6)
                 continue;
 
-            if (server === home)
+            if (server === home){
                 maxThreads = Math.floor((ns.getServerMaxRam(home) - ns.getServerUsedRam(home)) / hackRam);
-            let target = "sigma-cosmetics ";
+                maxThreads = Math.floor(maxThreads * 0.8);
+            }
+            let target = "sigma-cosmetics";
             if (!ns.isRunning(Action.EarlyHack, server, ...[target])){
                 ns.exec(Action.EarlyHack, server, maxThreads, ...[target]);
                 ns.printf(`${server} working on ${target}`);
@@ -75,6 +76,13 @@ async function prepServers(ns, serverList){
             
         await ns.sleep(TENTH_SECOND);
     }
+}
+
+function isHomeServers(ns, target){
+    let purchasedServers = ns.getPurchasedServers();
+    if (target === home || purchasedServers.includes(target))
+        return true;
+    else false;
 }
 
 async function attemptOpenRoot(ns, target){

@@ -1,9 +1,10 @@
-import { Services } from 'scripts/data/file_list.js';
+import { Services, Handler } from 'scripts/data/file_list.js';
 const home = "home";
 const TEN_SECONDS = 10000;
 
 /** @param {NS} ns */
 export async function main(ns) {
+    debugger;
     disableLogs(ns);
     let printCounter = 0;
     while (isEarlyGame(ns)){
@@ -15,12 +16,19 @@ export async function main(ns) {
         runScript(ns, Services.EarlyHack);
 
         let homeGB = ns.getServerMaxRam(home);
-        if (homeGB > 16)
-            if (ns.getPurchasedServers().length < 25)
-                runScript(ns, Services.HackNet);
-        if (homeGB > 256){
-            if (!ns.isRunning(Services.UpgradeServer))
+        if (homeGB > 16){
+            let purchasedServers = ns.getPurchasedServers();
+            if (purchasedServers.length < 25 || !ns.isRunning(Services.UpgradeServer)){
                 runScript(ns, Services.PurchaseServer);
+            }
+
+            runScript(ns, Services.HackNet);
+        }
+
+        if (homeGB > 256){
+        
+            runScript(ns, Handler.TorHandler);
+            runScript(ns, Handler.AutoBackdoor);
         }
             
         await ns.sleep(TEN_SECONDS);
@@ -37,7 +45,7 @@ function runScript(ns, scriptFile) {
 
 function isEarlyGame (ns){
     let homeGB = ns.getServerMaxRam(home);
-    if (homeGB < 200)
+    if (homeGB < 2000)
         return true;
 
     let hasFormulas = ns.fileExists('Formulas.exe');
@@ -48,20 +56,28 @@ function isEarlyGame (ns){
     if (pServers.length < 25)
         return true;
 
-    let lowestGB = getMinPurchasedRam(pServers).MaxRAM;
+    let lowestGB = getMinPurchasedRam(ns, pServers);
     if (lowestGB < 1000)
+        return true;
+
+    let playerLevel = ns.getHackingLevel();
+    if (playerLevel < 100)
         return true;
 
     return false;
 }
 
-function getMinPurchasedRam(servers) {
-    if (servers.length < 1) {
+function getMinPurchasedRam(ns, serverNames) {
+    if (serverNames.length < 1) {
         return null;
     }
 
-    return servers.reduce((lowest, current) => {
-        if (current.MaxRAM < lowest.MaxRAM) {
+    let serverRams = [];
+    serverNames.forEach((x) => serverRams.push(ns.getServerMaxRam(x)));
+
+    return serverRams.reduce((lowest, current) => {
+        
+        if (current < lowest) {
             return current;
         }
         return lowest;

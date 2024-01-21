@@ -1,347 +1,162 @@
-import { getHackTargetList } from 'scripts/handler/get_best_hack_server.js';
 import { writeToPort } from 'scripts/handler/port_handler.js';
-import { Action, Services } from 'scripts/data/file_list.js';
+import { getHackTargetList } from 'scripts/handler/get_best_hack_server.js';
+import { Action, Services, Handler } from 'scripts/data/file_list.js';
 import { _port_list } from 'scripts/enums/ports.js';
-import { getHWGWAllocation, getWGWAllocation, setAllocations } from 'scripts/helpers/hwgw_wgw_server_alloc_helper';
-import { handleTailState } from 'scripts/helpers/tail_helper.js';
 
-//#region Constants
 const state = {
     Ready : 1,
     Prepped : 2,
     Hacked : 3
 };
 
-const rstate = {
-    Ready : 1,
-    Waiting : 2,
-    Update : 6
-}
-
-const capState = {
-    High: 1,
-    Low: 2,
-    Mid: 3
-}
-
-const TENTH_SECOND = 100;
-const HALF_SECOND = 500;
 const ONE_SECOND = 1000;
+const FIVE_SECONDS = 5000;
 const HALF_MINUTE = 30000;
 const ONE_MINUTE = 60000;
 const NULL_MESSAGE = "NULL PORT DATA";
 const home = "home";
-// #endregion
-// #region Variables
-//General
-let MAX_TARGETS = 15;
-let REFRESH_PERIOD;
-let refreshState;
-let lastRefreshed;
-let tailStateTime;
-//Target Handling
-let handlerList;
-let targetList;
+
+let waitingList;
 let activeList;
-let deactivateList;
-//Port Handlers
+let readyList;
 let hwgwPortHandler;
 let wgwPortHandler;
 let mainHandler;
-let historyHandler;
-//Instance Handling
-let historyList;
-let toBeKilled;
-let capacityCount;
-let capacityState;
-let lastInstanceCheck;
-let lastAllocChange;
-// #endregion
+let nextPrepTime;
 
 /** @param {NS} ns */
 export async function main(ns) {
-// #region Default state values (On Start)
-    handlerList = [];
-    targetList = [];
-    activeList = [];
-    deactivateList = [];
-    historyList = [];
-    toBeKilled = [];
-    refreshState = rstate.Ready;//Preset fetch data immediately
-    capacityCount = 0;
-    capacityState = capState.Mid;//Default to Mid prior to normalization
-    lastInstanceCheck = new Date().getTime() + ONE_MINUTE;//Wait for 1min to allow for normalization of servers
-    lastAllocChange = new Date().getTime();
-    tailStateTime = new Date().getTime();
-    setAllocations(ns, 12,25);
-// #endregion
-// #region Tail view setup & exit handling (Kill all 3 services)
-    let sizeX = 500;
-    let sizeY = 450;
-    let posX = 2050;
-    let posY = 930;
-    ns.atExit(() => {
-        ns.closeTail();
-        let wgw = ns.getRunningScript(Services.WGW, home);
-        if (wgw)
-            ns.kill(wgw.pid);
-
-        for (let i = 39; i > 1; i--){
-            initiateKill(ns, i);
-        }
-    });
-// #endregion
-// #region Required setup - log spam & port handler setup and clearing
     disableLogs(ns);
+    activeList = [];
+    waitingList = [];
+    readyList = [];
+    nextPrepTime = new Date().getTime()-1000;
+
+    ns.atExit(() => {
+        ns.scriptKill(Services.WGW, home);
+        ns.scriptKill(Services.HWGW, home);
+        ns.closeTail();
+    });
+
     hwgwPortHandler = ns.getPortHandle(_port_list.HWGW_THREADS);
     wgwPortHandler = ns.getPortHandle(_port_list.WGW_THREADS);
     mainHandler = ns.getPortHandle(_port_list.HANDLER_PORT);
-    historyHandler  = ns.getPortHandle(_port_list.HISTORY_PORT);
 
     hwgwPortHandler.clear();
     wgwPortHandler.clear();
     mainHandler.clear();
-    historyHandler.clear();
+
+    writeToPort(ns, _port_list.MAIN_SERVICE_PORT, true);
     
-    addOrUpdateInstance(ns, {id: 1, target: ""});//add default HWGW instance
-// #endregion
-    ns.printf(`Handler Initialized`);
-    await writeToPort(ns, _port_list.MAIN_SERVICE_PORT, true);
-    await ns.sleep(TENTH_SECOND);
-    //Active Loop
+    debugger;
     while (true){
-        let thisScript = ns.getRunningScript();
-        handleTailState(ns, sizeX, sizeY, posX, posY, thisScript);
-        REFRESH_PERIOD = setRefreshRate(ns);
-        await refreshTargets(ns);//Check for new targets
-        updateInstanceRequired(ns);//Check if we nees more or less instances
-        await ns.sleep(HALF_SECOND);
-            while (historyHandler.peek() !== NULL_MESSAGE){      
-                let portRead = historyHandler.read();
-                let data = JSON.parse(portRead);                
-                addOrUpdateInstance(ns, data);
-                await ns.sleep(5);
-        }//end of Instance data update handling
+        let currentTime = new Date().getTime();
+        if (nextPrepTime <= currentTime){
+            ns.printf(`Prepping servers`);
+            ns.run(Services.PrepHackServers, 1);
+            await ns.sleep(FIVE_SECONDS);
+            ns.run(Handler.AutoBackDoor, 1);
+            ns.run(Handler.TorHandler, 1);
+            ns.printf(`Update Target List`);
+            let tempList = await getHackTargetList(ns);
+            tempList.forEach((x) => {
+                if (activeList.includes(x.name))
+                    return;
+    
+                activeList.push(x.name);
+                waitingList.push({name: x.name, time: currentTime});
+                ns.printf(`${x.name} added to target list`);
+            });
+            nextPrepTime = currentTime + ONE_MINUTE;
+        }//Prep servers and check for any new targets
+
+        await ns.sleep(ONE_SECOND);
+
+        for (let item of waitingList){
+            currentTime = new Date().getTime();
+            if (item.time > currentTime)
+                continue;
+        
+
+            let homeScripts = getActiveHomeScripts(ns);
+            let serverScripts = getActiveServerScripts(ns);
+            if (hasActiveScripts(item, homeScripts) || hasActiveScripts(item, serverScripts)){
+                item.time = currentTime + HALF_MINUTE;
+                continue;
+            }
+
+            if (targetInIdealState(ns, item.name))
+                readyList.push({ name: item.name, state: state.Prepped });
+            else
+                readyList.push({ name: item.name, state: state.Hacked });
+
+            ns.printf(`${item.name} moved to ready`);
+            let index = waitingList.findIndex(x => x.name === item.name);
+            waitingList.splice(index, 1);
+        }//Handle WaitList
+
+        for (let item of readyList){
+            await ns.sleep(ONE_SECOND);    
+            let readyPost = { name: item.name, time: null };
+            let postData = JSON.stringify(readyPost);
+            if (item.state === state.Prepped){
+                if (hwgwPortHandler.full())
+                    continue;
+
+                let writeResult = hwgwPortHandler.tryWrite(postData);
+                if (!writeResult)
+                    continue;
+
+                ns.printf(`${item.name} submitted to HWGW`);
+            }//Handle ready to be hacked
+
+            if (item.state === state.Hacked){
+                if (wgwPortHandler.full())
+                    continue;
+
+                let writeResult = wgwPortHandler.tryWrite(postData);
+                if (!writeResult)
+                    continue;
+
+                ns.printf(`${item.name} submitted to WGW`);
+            }//Handle ready to be prepped
+            
+            let index = readyList.findIndex(x => x.name === readyPost.name);
+            readyList.splice(index, 1);
+        }//Handle ready list
+
+        await ns.sleep(ONE_SECOND);
 
         if (mainHandler.peek() !== NULL_MESSAGE){//check for active posts
-            ns.printf("Handler Queue received data");
             while (mainHandler.peek() !== NULL_MESSAGE){            
                 let portRead = mainHandler.read();
                 let data = JSON.parse(portRead);
-                if (toBeKilled.length > 0)
-                    killRequiredInstance(ns, data.name);
                 
-                handlerList.push(data);
-                await ns.sleep(5);
+                waitingList.push(data);
+                await ns.sleep(ONE_SECOND);
             }
-        }//end of post handling for response port
+        }//Handle returning data
 
-        if (handlerList.length < 1){//No posts
-            await ns.sleep(HALF_SECOND);
-            continue;
-        }
-
-        let handleItem = findFirstCurrentItem();//Check if post ready
-        if (!handleItem){//No posts ready - print time till next
+        if (waitingList.length > 1){
             let tempTime = new Date().getTime();
-            let minTime = handlerList.reduce((min, item) => {
+            let minTime = waitingList.reduce((min, item) => {
                 if (item.time < min) {
-                  return item.time;
+                    return item.time;
                 } else {
-                  return min;
+                    return min;
                 }
-              }, handlerList[0].time);
-
+            }, waitingList[0].time);
             let currentDate = new Date();
             let timeFormatted = currentDate.toLocaleTimeString(`sv`)
             let minTimeString = minTime - tempTime;
-            ns.printf(`${timeFormatted} - W: ${handlerList.length} (${ns.tFormat(minTimeString)})`);
-            await ns.sleep(HALF_SECOND);
-            continue;
-        }//end of "Waiting" area - No posts ready to be handed off
+            ns.printf(`${timeFormatted} - W: ${waitingList.length} (${ns.tFormat(minTimeString)})`);
+        }//Print next wait period
 
-        handleItem = deactivateLowTargets(ns, handleItem);//Check if post should be active
-        if (handleItem === null || handleItem === undefined || !handleItem)//If no longer active
-            continue;
-
-        //Active and Ready to be processed
-        if (handleItem.state === state.Prepped){//Ready to hack - Send to HWGW
-            let scriptList = getActiveServerScripts(ns);
-            let homeScriptList = getActiveHomeScripts(ns);
-            let result = hasActiveScripts(handleItem.name, scriptList);
-            let homeResult = hasActiveScripts(handleItem.name, homeScriptList);
-            if (result || homeResult){
-                updateItemTime(handleItem, new Date().getTime() + ONE_MINUTE);                
-                ns.printf(`Scripts active: ${handleItem.name} - wait 1min`);
-                continue;
-            }
-
-            handleItem.state = state.Ready;
-            handleItem.time = new Date().getTime();
-            while (hwgwPortHandler.full()){
-                ns.printf("HWGW handler full - awaiting post");
-                await ns.sleep(HALF_SECOND);
-            }
-            ns.printf(`Writing to HWGW: ${handleItem.name}`);
-            hwgwPortHandler.write(JSON.stringify(handleItem));
-        }//end of HWGW queue handling
-
-        if (handleItem.state === state.Hacked){//Ready to prep - Send to WGW
-            let scriptList = getActiveServerScripts(ns);
-            let homeScriptList = getActiveHomeScripts(ns);
-            let result = hasActiveScripts(handleItem.name, scriptList);
-            let homeResult = hasActiveScripts(handleItem.name, homeScriptList);
-            if (result || homeResult){
-                updateItemTime(handleItem, new Date().getTime() + ONE_MINUTE);            
-                ns.printf(`Scripts active: ${handleItem.name} - wait 1min`);
-                continue;
-            }
-
-            handleItem.state = state.Ready;
-            handleItem.time = new Date().getTime();
-            while (wgwPortHandler.full()){
-                ns.printf("WGW handler full - awaiting post");
-                await ns.sleep(HALF_SECOND);
-            }
-            
-            ns.printf(`Writing to WGW: ${handleItem.name}`);
-            wgwPortHandler.write(JSON.stringify(handleItem));
-        }//end of WGW queue handling
-
-        removeItem(handleItem);//Post handled - remove from queue
+        await ns.sleep(ONE_SECOND);
     }
+
 }
 
-// #region Target List handling
-function handleTargetListData(ns, target){    
-    let currentTime = new Date().getTime();
-    let targetData = { name: target.name, time: currentTime, state: state.Ready };
-    let stringData = JSON.stringify(targetData);
-    if (activeList.includes(target.name)){
-        ns.printf(`${target.name} already active`);
-        return;
-    }
-
-    if (targetInIdealState(ns, target.name)){
-        if (hwgwPortHandler.full()){
-            ns.printf("HWGW handler full");
-            return;
-        }
-
-        let result = hwgwPortHandler.tryWrite(stringData);
-        if (!result){
-            ns.printf("HWGW failed to write");
-            return;
-        }
-
-    }
-    else{
-        if (wgwPortHandler.full()){
-            ns.printf("WGW handler full");
-            return;
-        }
-
-        let result = wgwPortHandler.tryWrite(stringData);
-        if (!result){
-            ns.printf("WGW failed to write");
-            return;
-        }
-    }
-
-    ns.printf(`New Target: ${target.name}`);
-    activeList.push(target.name);
-    if (targetList.length > 1)
-        targetList = targetList.filter((x) => { return x.name !== target.name; });
-}
-
-function deactivateLowTargets(ns, data){
-    if (deactivateList.length < 1)
-        return data;
-
-    if (deactivateList.includes(data.name)){
-        ns.printf(`${data.name} removed from active roster`);
-        let index = deactivateList.findIndex(item => item === data.name);
-        deactivateList.splice(index, 1);
-        return null;
-    }
-
-    return data;
-}
-
-async function refreshTargets(ns){
-    let currentTime = new Date().getTime();    
-    if (refreshState === rstate.Waiting){//Wait for refresh
-        if (lastRefreshed + REFRESH_PERIOD > currentTime)
-            return;
-
-        ns.printf("Refresh initiated");
-        refreshState = rstate.Ready;
-        return;
-    }
-    
-    if (refreshState === rstate.Ready){//Fetch All data
-        ns.run(Services.PrepHackServers, 1);
-        ns.printf("Prepping new hackable servers...");
-        await ns.sleep(HALF_SECOND);
-        refreshState = rstate.Update;
-        return;
-    }
-
-    if (ns.isRunning(Services.PrepHackServers)){
-        await ns.sleep(HALF_SECOND);
-        return;
-    }
-
-    ns.printf(`Getting new targets....`);//Fetch target list
-    setTargetMaxLength(ns);
-    targetList = await getHackTargetList(ns);
-    if (targetList.length > 1)//remove best candidate for HomeScriptUse
-        targetList = targetList.slice(1);
-
-    let tempHomeScripts = getActiveHomeScripts(ns);
-    targetList.filter((x) => {
-        return !hasActiveScripts(x.name, tempHomeScripts);
-    });
-
-     if (targetList.length > MAX_TARGETS);
-        targetList = targetList.slice(0, MAX_TARGETS);
-    
-    ns.printf(`Comparing ${targetList.length} targets`);
-    let tempActiveStoreList = [];//Temp store current active list
-    activeList.forEach((x) => tempActiveStoreList.push(x));
-    let hackLevel = ns.getHackingLevel();
-    if (hackLevel < 1000)
-        targetList.sort((a, b) => a.time - b.time);
-    else
-        targetList.sort((a, b) => b.score - a.score);
-    
-    for (let target of targetList){
-        if (activeList.includes(target.name)){//Target should still be active
-            let index = tempActiveStoreList.findIndex(item => item === target.name);
-            tempActiveStoreList.splice(index, 1);
-            continue;
-        }
-         
-        await ns.sleep(TENTH_SECOND);
-        handleTargetListData(ns, target);//Add to active list
-    }
-
-    tempActiveStoreList.forEach((x) => {//Remove old targets from active
-        let index = activeList.findIndex(item => item === x);
-        if (index !== -1){
-            activeList.splice(index, 1);
-            deactivateList.push(x);
-        }
-    });
-    //Reset state for next refresh
-    lastRefreshed = new Date().getTime();
-    ns.printf(`Refresh completed (Next: ${ns.tFormat(REFRESH_PERIOD)})`);
-    refreshState = rstate.Waiting;
-    setServerAllocations(ns);
-    await ns.sleep(HALF_SECOND);
-}
-// #endregion
-// #region Script Validations
 const activeScriptCheckList = [Action.Hack, Action.Grow, Action.Weak];
 function hasActiveScripts(item, psList){
     for (let listItem of psList){
@@ -395,253 +210,6 @@ function targetInIdealState(ns, targetName){
 
     return true;
 }
-// #endregion
-// #region List handling
-function removeItem(itemToRemove){
-    let index = handlerList.findIndex(item => item === itemToRemove);
-    if (index !== -1)
-        handlerList.splice(index, 1);
-}
-
-function updateItemTime(itemToUpdate, newTime) {
-    let index = handlerList.findIndex(item => item === itemToUpdate);
-  
-    if (index !== -1)
-        handlerList[index].time = newTime;
-
-}
-
-function findFirstCurrentItem() {
-    let currentTime = new Date().getTime();
-    let filteredList = handlerList.filter(item => item.state === state.Prepped || item.state === state.Hacked);
-    let currentItem = filteredList.find(item => currentTime > item.time);
-  
-    return currentItem;
-  }
-// #endregion
-// #region Instance Caluclations
-function updateInstanceRequired(ns){
-    let currentTime = new Date().getTime();
-
-    if (lastInstanceCheck + ONE_SECOND > currentTime)
-        return;
-
-    let currentState = checkCurrentCapacity(ns);
-
-    if (currentState !== capacityState){
-        capacityCount = 0;
-        capacityState = currentState;
-    }
-    else
-        capacityCount++;
-
-    if (capacityCount >= 30){
-        let playerLevel = ns.getHackingLevel();
-        if ((currentState === capState.Low || currentState === capState.Mid) && getInstanceCount(ns) < 39)
-            createInstance(ns);
-
-        if (currentState === capState.High && getInstanceCount(ns) > 2){
-            if (playerLevel < 2500 || getInstanceCount(ns) > 7)
-                addInstanceToKillList(ns);    
-        }
-
-        capacityCount = 0;
-        capacityState = capState.Mid;
-    }
-
-    lastInstanceCheck = new Date().getTime();
-}
-
-function checkCurrentCapacity(ns){
-    let lowLim = 0.35;
-    let highLim = 0.85;
-    let purchasedServers = getHWGWAllocation(ns);
-    let totalUsed = purchasedServers.reduce((total, server) => { return total + ns.getServerUsedRam(server); }, 0);
-    let totalMax = purchasedServers.reduce((total, server) => { return total + ns.getServerMaxRam(server); }, 0);
-
-    let currentRate = totalUsed / totalMax;
-    if (currentRate > lowLim && currentRate < highLim)
-        return capState.Mid;
-    else if (currentRate < lowLim)
-        return capState.Low;
-    else
-        return capState.High;
-}
-
-function setServerAllocations(ns){   
-    let currentTime = new Date().getTime();
-    
-    if (lastAllocChange + HALF_MINUTE > currentTime)
-        return;
-    
-    let hwgwAlloc = getHWGWAllocation(ns);
-    let wgwAlloc = getWGWAllocation(ns);
-    let hwgwCount = hwgwAlloc.length;
-    let wgwCount = wgwAlloc.length;
-    let totalHWGWUsed = hwgwAlloc.reduce((total, server) => { return total + ns.getServerUsedRam(server); }, 0);
-    let totalHWGWMax = hwgwAlloc.reduce((total, server) => { return total + ns.getServerMaxRam(server); }, 0);
-    let totalWGWUsed = wgwAlloc.reduce((total, server) => { return total + ns.getServerUsedRam(server); }, 0);
-    let totalWGWMax = wgwAlloc.reduce((total, server) => { return total + ns.getServerMaxRam(server); }, 0);
-    totalHWGWUsed = isNaN(totalHWGWUsed) ? 0 : totalHWGWUsed;
-    totalHWGWMax = isNaN(totalHWGWMax) ? 0 : totalHWGWMax;
-    totalWGWUsed = isNaN(totalWGWUsed) ? 0 : totalWGWUsed;
-    totalWGWMax = isNaN(totalWGWMax) ? 0 : totalWGWMax;
-    let hwgwRatio = totalHWGWUsed / totalHWGWMax;
-    let wgwRatio = totalWGWUsed / totalWGWMax;
-
-    if (Math.max(wgwRatio,hwgwRatio) - Math.min(wgwRatio,hwgwRatio) < 0.1)
-        return;
-    
-    if (hwgwRatio >= wgwRatio){
-        let result = Math.ceil((hwgwRatio/wgwRatio) * hwgwCount);
-        if (result < wgwCount - 3)
-            result = wgwCount - 3
-        wgwCount = 25-result;
-    }
-    else{
-        let result = Math.ceil((wgwRatio/hwgwRatio) * wgwCount);
-        if (result > wgwCount + 3)
-            result = wgwCount + 3;
-        wgwCount = result;
-    }
-
-    if (wgwCount > 24)
-        wgwCount = 24;
-
-    if (wgwCount < 0)
-        wgwCount = 0;
-    
-    setAllocations(ns, wgwCount, 25);
-    lastAllocChange = new Date().getTime();
-    ns.printf(`New Alloc: H:${25-wgwCount} | W: ${wgwCount} (P:${hwgwCount}|${25-hwgwCount})`);
-}
-// #endregion
-// #region Instance Creation / Update / Removal
-function createInstance(ns){
-    ns.printf(`Instance Create requested`);
-    let count = getInstanceCount(ns);
-    let instanceDetails = { id: count+1, target: "" };
-    let index = -1;
-    if (historyList.length > 0)
-        index = historyList.findIndex(item => item.id === instanceDetails.id);
-
-    if (index === -1)
-        historyList.push(instanceDetails);
-    
-    ns.printf(`IC index not -1 - try create ${count+1}`);
-    
-    if (!ns.isRunning(Services.HWGW, home, ...[count+1]))
-        ns.exec(Services.HWGW, home, 1, ...[count+1]);
-}
-
-function addOrUpdateInstance(ns, data){
-    ns.printf(`${data.id} data update to ${data.target}`);
-    let index = -1;
-    if (historyList.length > 0)
-        index = historyList.findIndex(item => item.id === data.id);
-
-    if (index === -1)
-        historyList.push(data);
-    else
-        historyList[index] = data;
-}
-
-function addInstanceToKillList(ns){
-    let count = getInstanceCount(ns);
-    ns.printf(`Adding ${count} to kill list`);
-    if (!toBeKilled.includes(count))
-        toBeKilled.push(count);
-}
-
-function killRequiredInstance(ns, targetName){
-    ns.printf(`Check if kill required ${targetName}`);
-    let index = -1;
-    if (historyList.length > 0)
-        index = historyList.findIndex(item => item.target === targetName);
-
-    if (index === -1)
-        return;
-
-    let serverDetails = historyList[index];
-    
-    if (serverDetails.id === 1)
-        return;
-
-    if (toBeKilled.includes(serverDetails.id))
-        initiateKill(ns, serverDetails.id);
-
-    if (toBeKilled.length > 0){
-        let tbkIndex = toBeKilled.findIndex(item => item = serverDetails.id);
-        toBeKilled.splice(tbkIndex, 1);
-    }
-    
-    historyList.splice(index, 1);
-}
-
-function initiateKill(ns, id){
-    ns.printf(`Killing script: ${id}`);
-    if (ns.isRunning(Services.HWGW, home, ...[id])){
-        let script = ns.getRunningScript(Services.HWGW, home, ...[id]);
-        if (script !== undefined && script.pid !== 0)
-            ns.kill(script.pid);
-    }
-}
-
-function getInstanceCount(ns){
-    let homePs = ns.ps(home);
-    let count = homePs.reduce((acc, obj) => {
-        if (obj.filename === Services.HWGW) {
-          return acc + 1;
-        }
-        return acc;
-      }, 0);
-
-    return count;
-}
-//#endregion
-// #region Housekeeping
-function setTargetMaxLength(ns){
-    let playerLevel = ns.getHackingLevel();
-    let instanceCount = getInstanceCount(ns);
-    if (playerLevel > 2500 && instanceCount < 7){
-        for (let i=7-instanceCount; i<7; i++){
-            createInstance(ns);
-        }
-    }
-
-    if (playerLevel > 3000 && instanceCount >= 20)
-        MAX_TARGETS = Infinity;
-
-    if (playerLevel > 3000 && instanceCount < 20)
-        MAX_TARGETS = 50;
-
-    if (playerLevel < 2000)
-        MAX_TARGETS = 30;
-    
-    if (playerLevel < 1000)
-        MAX_TARGETS = 15;
-
-}
-
-function setRefreshRate(ns){
-    let hackLevel = ns.getHackingLevel();
-    return getRefreshPeriod(hackLevel);
-}
-
-function getRefreshPeriod(playerHackLevel) {
-    for (const threshold of refresh_threshold) {
-        if (playerHackLevel < threshold.level) {
-            return threshold.value;
-        }
-    }
-
-    return 0; 
-}
-
-const refresh_threshold = [
-    { level: 100, value: HALF_MINUTE },
-    { level: Infinity, value: ONE_MINUTE },
-];
 
 function disableLogs(ns){
     ns.disableLog("disableLog");
@@ -651,7 +219,6 @@ function disableLogs(ns){
     ns.disableLog("getServerMoneyAvailable");
     ns.disableLog("getServerSecurityLevel");
     ns.disableLog("getServerMaxMoney");
-    ns.disableLog("ui.clearTerminal");
     ns.disableLog("getServerUsedRam");
     ns.disableLog("getServerMaxRam");
     ns.disableLog("getHackingLevel");
@@ -666,4 +233,3 @@ function disableLogs(ns){
     ns.disableLog("tail");
     ns.disableLog("run");
 }
-//#endregion

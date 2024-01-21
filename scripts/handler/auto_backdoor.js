@@ -1,7 +1,8 @@
 import { maxPortsOpen } from "scripts/handler/general_handler.js";
 import { Handler } from 'scripts/data/file_list.js';
 
-const backdoorList = ["CSEC", "I.I.I.I", "run4theh111z", "avmnite-02h", "The-Cave", "w0r1d_d43m0n" ];
+const home = "home";
+const backdoorList = ["CSEC", "avmnite-02h", "I.I.I.I", "run4theh111z", "fulcrumassets", "The-Cave" ];
 const apps = [
     { name: "BruteSSH.exe", action: (ns, target) => ns.brutessh(target) },
     { name: "FTPCrack.exe", action: (ns, target) => ns.ftpcrack(target) },

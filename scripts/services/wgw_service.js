@@ -1,17 +1,8 @@
 import { writeToPort, readFromPort } from 'scripts/handler/port_handler.js';
-import { getWGWPostData, getWGWPostData_Mock } from 'scripts/helpers/thread_calc_helper.js';
-import { SCRIPT_RAM } from 'scripts/handler/general_handler.js';
+import { getWGWPostData_Mock } from 'scripts/helpers/thread_calc_helper.js';
 import { ThreadServer } from 'scripts/models/thread_models.js';
 import { _port_list } from 'scripts/enums/ports.js';
-import { Action, Services } from 'scripts/data/file_list.js';
-import { getWGWAllocation } from 'scripts/helpers/hwgw_wgw_server_alloc_helper';
-import { handleTailState } from 'scripts/helpers/tail_helper';
-
-const state = {
-    Ready : 1,
-    Prepped : 2,
-    Hacked : 3
-};
+import { Action } from 'scripts/data/file_list.js';
 
 let serverObjects = [];
 const home = "home";
@@ -19,63 +10,48 @@ const HALF_SECOND = 500;
 const ONE_SECOND = 1000;
 const TEN_SECONDS = 10000;
 const actionList = [ Action.Hack, Action.Grow, Action.Weak];
-let tailStateTime;
+let SCRIPT_RAM =  0;
 
 /** @param {NS} ns */
 export async function main(ns) {
-    tailStateTime = new Date().getTime();
-    let sizeX = 500;
-    let sizeY = 450;
-    let posX = 1545;
-    let posY = 930;
+    disableLogs(ns);
     ns.atExit(() => {
         ns.closeTail();
-        let hwgw = ns.getRunningScript(Services.HWGW, home);
-        if (hwgw)
-            ns.kill(hwgw.pid);
     });
-    disableLogs(ns);
+
+    SCRIPT_RAM = ns.getScriptRam(Action.Weak);
     await ns.sleep(TEN_SECONDS);
+
     while (true){        
-        let thisScript = ns.getRunningScript();
-        handleTailState(ns, sizeX, sizeY, posX, posY, thisScript);
-        fetchThreads(ns);
-        let maxThreads = getMaxThreads();
         let data = await readFromPort(ns, _port_list.WGW_THREADS);
-        if (data == null){
+        if (data === null){
             await ns.sleep(HALF_SECOND);
             continue;
         }
-        updateThreads(ns);
-        let endTime;        
+        
+        fetchThreads(ns);
         let currentTime = new Date().getTime();
-        let post = await getWGWPostData(ns, data.name, 1);
-        let threads = post.W1Threads + post.W2Threads + post.GThreads;
-        let homeAvail = serverObjects.filter((x) => x.ServerName === home).AvailableThreads;
+        let endTime = currentTime;
         let player = ns.getPlayer();
         let server = ns.getServer(data.name);
-
-        if (homeAvail > threads){
-            let homeServer = ns.getServer(home);
-            post = await getWGWPostData_Mock(ns, server, player, homeServer.cpuCores);
-            threads = post.W1Threads + post.W2Threads + post.GThreads;
-        }
-
+        let homeServer = ns.getServer(home);
+        let post = await getWGWPostData_Mock(ns, server, player, homeServer.cpuCores);
+        let threads = post.W1Threads + post.W2Threads + post.GThreads;
+        let weakT = ns.formulas.hacking.weakenTime(server, player);
         if (threads > 0){
             ns.printf(`${"-".repeat(50)}`);
             ns.printf(`Mending ${data.name}`);
-            ns.printf(`Total Threads: [ W1:${post.W1Threads}, G:${post.GThreads}, W2:${post.W2Threads} ]`)
             let batchList = getBatchList(post);
             let toBePosted = true;
+            updateThreads(ns);
             while (toBePosted){
                 let result = await executeThreadsToServers(ns, batchList, data.name);
-                if (result === null)
-                    toBePosted = false;
-                else{  
+                toBePosted = result !== null;
+                
+                if (result){
                     post = calculateRemaingPostData(result, post);
                     batchList = getBatchList(post);
                     threads = post.W1Threads + post.W2Threads + post.GThreads;
-                    ns.printf(`Remaining: [ W1:${post.W1Threads}, G:${post.GThreads}, W2:${post.W2Threads} ]`)
                     updateThreads(ns);
                     let availableThreads = getAvailableThreads();
                     let minThread = threads*0.2;
@@ -83,27 +59,19 @@ export async function main(ns) {
                         await ns.sleep(ONE_SECOND);
                         updateThreads(ns);
                         availableThreads = getAvailableThreads();
-                        
-                        maxThreads = getMaxThreads();
-                        if (availableThreads >= maxThreads)
-                            break;
-                    }  
+                    }
                 }
-                ns.printf(`Attempting remaining post...`);
+                
+                await ns.sleep(ONE_SECOND);
             }
-            let weakT = ns.formulas.hacking.weakenTime(server, player);
+            
             currentTime = new Date().getTime();
             endTime = currentTime + weakT;
         }
-        else{
-            ns.printf(`No prep required: ${data.name}`);
-            endTime = currentTime;
-        }
-        data.state = state.Prepped;
-        data.time = endTime + ONE_SECOND;
-        ns.printf(`Writing to Handler: ${data.name}`);
-        ns.printf(`Wait Time: ${ns.tFormat(data.time - new Date().getTime())}`);
+        data.time = endTime;
+        ns.printf(`${data.name} removed and submitted to handler`);
         await writeToPort(ns, _port_list.HANDLER_PORT, data);
+        await ns.sleep(ONE_SECOND);
     }
 }
 /** @param {NS} ns */
@@ -142,11 +110,7 @@ async function executeThreadsToServers(ns, batchList, target) {
     execBuilder.forEach((x) => {
         if (x[2] === 0)
             return;
-        
-        let serverString = `${x[1]}`;
-        let actionString = `${x[0].slice(x[0].length-7, x[0].length-3)}`;
-        let paddedThreads = `${x[2]}`.padEnd(5, " ");
-        ns.printf(`${serverString} A:${actionString} T:${paddedThreads} D:${ns.formatNumber(x[3][1], 2)}`);
+
         ns.exec(x[0], x[1], x[2], ...x[3]);
     });
 
@@ -231,19 +195,9 @@ function getAvailableThreads(){
         return total + server.AvailableThreads; }, 0);
 }
 
-function getMaxThreads(){
-    return serverObjects.reduce((total, server) => {
-        return total + server.MaxThreads; }, 0);
-}
-
 function updateThreads(ns) {
-    fetchThreads(ns);
     serverObjects.forEach((x) => {
-        if (x.ServerName === home)
-            x.UsedThreads = calcHomeUsedThreads(ns);
-        else
-            x.UsedThreads = calcServerUsedThreads(ns, x.ServerName);
-
+        x.UsedThreads = calcHomeUsedThreads(ns);
         x.AvailableThreads = x.MaxThreads - x.UsedThreads;
     });
 }
@@ -258,29 +212,11 @@ function calcHomeUsedThreads(ns){
     return Math.ceil(ram / SCRIPT_RAM);
 }
 
-function calcServerUsedThreads(ns, name) {
-    let ram = ns.getServerUsedRam(name);
-    if (ram === 0) return 0;
-
-    return Math.ceil(ram / SCRIPT_RAM);
-}
-
 function fetchThreads(ns) {
     serverObjects = [];
     let homeRam = (ns.getServerMaxRam(home) - getHomeReservedRam(ns)) * 0.8;
     let homeThreads = Math.floor(homeRam / SCRIPT_RAM);
-    serverObjects.push(new ThreadServer(home, new ThreadServer(home, homeThreads)));
-
-    let tempObjects = [];
-    let allocate = getWGWAllocation(ns);
-    allocate.forEach((x) => {
-        let maxRam = ns.getServerMaxRam(x);
-        let maxThreads = Math.floor(maxRam / SCRIPT_RAM);
-        tempObjects.push(new ThreadServer(x, maxThreads, 0));
-    });
-
-    tempObjects.sort((a, b) => b.ServerName - a.ServerName);
-    tempObjects.forEach((x) => serverObjects.push(x));
+    serverObjects.push(new ThreadServer(home, homeThreads));
 }
 
 function getHomeReservedRam(ns){

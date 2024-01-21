@@ -6,7 +6,7 @@ import { _timeout } from 'scripts/enums/timeout.js';
 const serviceTasks = [//TODO: PurchaseService (DarkWeb / Augments / RAM / Cores / etc) - .singlularity needed
     { name: "KillServers", waitBusy: true },
     { name: "KillHome", waitBusy: true },
-    { name: "HackHandler", waitBusy: false },
+    { name: "HackHandler", waitBusy: true },
     { name: "WGW", waitBusy: false },
     { name: "HWGW", waitBusy: false },
     { name: "HackNet", waitBusy: false },
